@@ -1,0 +1,29 @@
+export interface Orders {
+    key: any;
+    id: any;
+    order_no?: any;
+    route_id?: any;
+    order_id?: any;
+    pickup_date?: any;
+    pickup_time?: any;
+    address_id?: any;
+    status?: any;
+    address?: any;
+    driver_name?: any;
+    driver_mobile_no?: any;
+    customer_id: number;
+    total: number;
+    weight?: any;
+    price?: number;
+    linens_weight?: any;
+    linens_price?: any;
+    transport_price?: any;
+    order_type?: any;
+    customer_name?: any;
+    addons_amount?: any;
+    addons?: any;
+    estimate_time?: any;
+    duration: number;
+    distance?: any;
+    dateOngoing?: any;
+}

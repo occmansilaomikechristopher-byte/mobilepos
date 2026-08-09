@@ -1,0 +1,134 @@
+import React, { useEffect, useState } from 'react';
+import { View, FlatList, Text, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { fetchEmployeesFromDB } from '../utils/databaseService';
+
+interface Employee {
+    id: string;
+    firstname: string;
+    lastname: string;
+    employee_no: string;
+}
+
+const EmployeeListScreen = () => {
+    const [loading, setLoading] = useState(true);
+    const [employees, setEmployees] = useState<Employee[]>([]);
+    const [page, setPage] = useState(1);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [cartItems, setCartItems] = useState<Employee[]>([]); // State for cart items
+    const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null); // State for selected employee details
+
+    useEffect(() => {
+        fetchInitialEmployees();
+    }, []);
+
+    console.log('employees:', employees)
+
+    const fetchInitialEmployees = async () => {
+        setLoading(true);
+        try {
+            const allEmployees = await fetchEmployeesFromDB();
+            setEmployees(allEmployees);
+            setLoading(false);
+        } catch (error) {
+            console.error('Error fetching employees:', error);
+            setLoading(false);
+        }
+    };
+
+    const addToCart = (employee: Employee) => {
+        // Check if employee is already in cart
+        if (cartItems.some(item => item.id === employee.id)) {
+            Alert.alert('Already Added', 'This employee is already in the cart.');
+            return;
+        }
+
+        // Add employee to cart
+        setCartItems([...cartItems, employee]);
+        Alert.alert('Added to Cart', `${employee.firstname} ${employee.lastname} added to cart.`);
+    };
+
+    const renderEmployeeDetails = () => {
+        if (!selectedEmployee) return null;
+
+        return (
+            <View style={{ flex: 1, backgroundColor: '#f0f0f0', padding: 20 }}>
+                <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 10 }}>Employee Details</Text>
+                <Text>{selectedEmployee.firstname} {selectedEmployee.lastname}</Text>
+                <Text>Employee No: {selectedEmployee.employee_no}</Text>
+                {/* Render other employee details as needed */}
+            </View>
+        );
+    };
+
+    const renderItem = ({ item }: { item: Employee }) => (
+        <TouchableOpacity onPress={() => setSelectedEmployee(item)}>
+            <View
+                style={{
+                    padding: 10,
+                    borderBottomWidth: 1,
+                    borderBottomColor: '#ccc',
+                    backgroundColor: selectedEmployee && selectedEmployee.id === item.id ? '#e0e0e0' : 'white',
+                }}>
+                <Text>
+                    {item.firstname} {item.lastname}
+                </Text>
+                <Text>Employee No: {item.employee_no}</Text>
+                {/* Render other employee details as needed */}
+            </View>
+        </TouchableOpacity>
+    );
+
+    if (loading) {
+        return (
+            <View
+                style={{
+                    flex: 1,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                }}>
+                <ActivityIndicator size="large" />
+            </View>
+        );
+    }
+
+    // Render the split pane layout
+    return (
+        <View style={{ flex: 1, flexDirection: 'row' }}>
+            {/* Employee List */}
+            <View style={{ flex: 1 }}>
+                <FlatList
+                    data={employees}
+                    renderItem={renderItem}
+                    keyExtractor={item => item.id.toString()}
+                    onEndReachedThreshold={0.5}
+                />
+            </View>
+
+            {/* Employee Details or Cart */}
+            <View style={{ flex: 1 }}>
+                {selectedEmployee ? (
+                    <View style={{ flex: 1 }}>
+                        {renderEmployeeDetails()}
+                    </View>
+                ) : (
+                    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 16 }}>Select an employee to view details.</Text>
+                    </View>
+                )}
+
+                {/* Render the cart items */}
+                <View style={{ borderTopWidth: 1, borderTopColor: '#ccc', marginTop: 10, paddingVertical: 10 }}>
+                    <Text style={{ textAlign: 'center', fontSize: 18, fontWeight: 'bold' }}>Cart</Text>
+                    {cartItems.map(cartItem => (
+                        <View key={cartItem.id} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 5 }}>
+                            <Text>{cartItem.firstname} {cartItem.lastname}</Text>
+                            <Text>Employee No: {cartItem.employee_no}</Text>
+                        </View>
+                    ))}
+                </View>
+            </View>
+        </View>
+    );
+};
+
+export default EmployeeListScreen;

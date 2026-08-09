@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "479581214687",
+    "project_id": "laundry-f08c8",
+    "storage_bucket": "laundry-f08c8.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:479581214687:android:e3fd5cd12b03358615d66a",
+        "android_client_info": {
+          "package_name": "com.TimekeeperApp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZVjaimTiOMy0Wa4e0W39KEwYFDREtx84"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
