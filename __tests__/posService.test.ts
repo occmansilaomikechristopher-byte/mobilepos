@@ -1,5 +1,8 @@
 import axiosConfig from '../src/utils/axiosConfig';
-import {savePosDamageItem} from '../src/utils/posService';
+import {
+    savePosDamageItem,
+    updatePosOwnerRequisitionPayment,
+} from '../src/utils/posService';
 
 jest.mock('../src/utils/axiosConfig', () => ({
     __esModule: true,
@@ -27,6 +30,23 @@ describe('POS damage service', () => {
 
         expect(axiosConfig.post).toHaveBeenCalledWith(
             '?action=mobile-pos-save-damage',
+            payload,
+        );
+    });
+});
+
+describe('owner requisition payment service', () => {
+    it('submits the payment so the payable report can deduct it', async () => {
+        (axiosConfig.post as jest.Mock).mockResolvedValueOnce({
+            data: {result: true, message: 'Payment saved successfully.'},
+        });
+
+        const payload = {requisition_id: 24, amount_paid: 500};
+
+        await updatePosOwnerRequisitionPayment(payload);
+
+        expect(axiosConfig.post).toHaveBeenCalledWith(
+            '?action=mobile-pos-update-owner-requisition-payment',
             payload,
         );
     });

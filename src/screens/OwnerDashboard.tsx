@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, {useState, useEffect} from 'react';
+import React, {useState, useCallback} from 'react';
 import {
     View,
     StyleSheet,
@@ -10,6 +10,7 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {useFocusEffect} from '@react-navigation/native';
 import LinearGradient from 'react-native-linear-gradient';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {TextComponent} from '../components';
@@ -29,10 +30,6 @@ const OwnerDashboard = ({navigation}) => {
     const [name, setName] = useState('');
     const [loading, setLoading] = useState(true);
     const [reports, setReports] = useState<ReportCard[]>([]);
-
-    useEffect(() => {
-        loadOwnerData();
-    }, []);
 
     const loadOwnerData = async () => {
         try {
@@ -167,6 +164,12 @@ const OwnerDashboard = ({navigation}) => {
             setLoading(false);
         }
     };
+
+    useFocusEffect(
+        useCallback(() => {
+            loadOwnerData();
+        }, []),
+    );
 
     const handleLogout = async () => {
         await AsyncStorage.multiRemove([

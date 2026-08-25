@@ -17,6 +17,18 @@ describe('POS dashboard tabs', () => {
         expect(CASHIER_TABS.some(tab => tab.label === 'Damage')).toBe(true);
     });
 
+    it('includes Quotations for cashiers after Sales', () => {
+        const tabs = getTabConfig(true);
+        const salesIndex = tabs.findIndex(tab => tab.label === 'Sales');
+        const quotationsIndex = tabs.findIndex(tab => tab.label === 'Quotations');
+
+        expect(quotationsIndex).toBe(salesIndex + 1);
+        expect(tabs[quotationsIndex].icon).toBe('file-document-outline');
+        expect(getTabConfig(false).some(tab => tab.label === 'Quotations')).toBe(
+            false,
+        );
+    });
+
     it('includes the Request tab for secretaries', () => {
         const tabs = getTabConfig(false, true);
         const requestTab = tabs.find(tab => tab.label === 'Request');
@@ -33,5 +45,14 @@ describe('POS dashboard tabs', () => {
         expect(getTabConfig(false).some(tab => tab.label === 'Request')).toBe(
             false,
         );
+    });
+
+    it('includes Quotations for ID 9 secretary users after Sales', () => {
+        const tabs = getTabConfig(false, true);
+        const salesIndex = tabs.findIndex(tab => tab.label === 'Sales');
+        const quotationsIndex = tabs.findIndex(tab => tab.label === 'Quotations');
+
+        expect(quotationsIndex).toBe(salesIndex + 1);
+        expect(tabs[quotationsIndex].icon).toBe('file-document-outline');
     });
 });

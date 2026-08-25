@@ -26,6 +26,7 @@ import POSSaleTab from './pos/POSSaleTab';
 import POSProductsTab from './pos/POSProductsTab';
 import POSInventoryTab from './pos/POSInventoryTab';
 import POSSalesTab from './pos/POSSalesTab';
+import POSQuotationTab from './pos/POSQuotationTab';
 import POSDamageTab from './pos/POSDamageTab';
 import POSOwnerRequisitionTab from './pos/POSOwnerRequisitionTab';
 import NewOrderTab from './NewOrderTab';
@@ -104,6 +105,7 @@ export const getScreenConfig = (
     ];
 
     if (isCashier) {
+        screens.push(<POSQuotationTab key="quotations" />);
         screens.push(
             <NewOrderTab key="biometric-logs" navigation={navigation} />,
         );
@@ -112,6 +114,7 @@ export const getScreenConfig = (
         );
         screens.push(<POSOwnerRequisitionTab key="owner-requisition" />);
     } else if (isSecretary) {
+        screens.push(<POSQuotationTab key="quotations" />);
         screens.push(
             <POSDamageTab key="damage" onStockChanged={onStockChanged} />,
         );

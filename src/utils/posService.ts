@@ -108,6 +108,43 @@ export const savePosSale = async (payload: {
     return res.data; // { result, message, invoice_no, subtotal, discount, total, change }
 };
 
+export interface PosQuotationItem extends CartItem {
+    description?: string;
+    line_total?: string;
+}
+
+export interface PosQuotation {
+    id: number;
+    quotation_no: string;
+    customer_name: string;
+    subtotal: string;
+    discount: string;
+    total: string;
+    status: string;
+    created_at: string;
+}
+
+export const savePosQuotation = async (payload: {
+    customer_name: string;
+    discount: number;
+    items: PosQuotationItem[];
+}) => {
+    const res = await axiosConfig.post('?action=save_pos_quotation', payload);
+    return res.data;
+};
+
+export const fetchPosQuotations = async (): Promise<PosQuotation[]> => {
+    const res = await axiosConfig.get('?action=get_pos_quotations');
+    return res.data?.quotations || [];
+};
+
+export const fetchPosQuotationDetails = async (quotationId: number) => {
+    const res = await axiosConfig.post('?action=get_pos_quotation_details', {
+        quotation_id: quotationId,
+    });
+    return res.data?.result ? res.data : null;
+};
+
 export const savePosDamageItem = async (payload: {
     branch_id: number;
     cashier_id: number;
@@ -149,5 +186,16 @@ export const updatePosOwnerRequisitionStatus = async (payload: {
     status: string;
 }) => {
     const res = await axiosConfig.post('?action=mobile-pos-update-owner-requisition-status', payload);
+    return res.data; // { result, message }
+};
+
+export const updatePosOwnerRequisitionPayment = async (payload: {
+    requisition_id: number;
+    amount_paid: number;
+}) => {
+    const res = await axiosConfig.post(
+        '?action=mobile-pos-update-owner-requisition-payment',
+        payload,
+    );
     return res.data; // { result, message }
 };

@@ -18,6 +18,7 @@ import {
     savePosOwnerRequisition,
     deletePosOwnerRequisition,
     updatePosOwnerRequisitionStatus,
+    updatePosOwnerRequisitionPayment,
 } from '../../utils/posService';
 import axiosConfig from '../../utils/axiosConfig';
 
@@ -54,6 +55,10 @@ const POSOwnerRequisitionTab = () => {
     const [loadingBranches, setLoadingBranches] = useState(false);
     const [modalVisible, setModalVisible] = useState(false);
     const [form, setForm] = useState(emptyForm);
+    const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+    const [selectedPaymentItem, setSelectedPaymentItem] = useState(null);
+    const [paymentAmount, setPaymentAmount] = useState('');
+    const [savingPayment, setSavingPayment] = useState(false);
 
     const loadItems = async () => {
         try {
@@ -123,6 +128,70 @@ const POSOwnerRequisitionTab = () => {
         setModalVisible(true);
     };
 
+    const openPaymentModal = item => {
+        setSelectedPaymentItem(item);
+        setPaymentAmount(String(item.amount_paid || ''));
+        setPaymentModalVisible(true);
+    };
+
+    const savePayment = async () => {
+        if (savingPayment) return;
+
+        if (!selectedPaymentItem?.server_id) {
+            Alert.alert(
+                'Payment unavailable',
+                'This requisition has not synced to the server yet. Please try again after it syncs.',
+            );
+            return;
+        }
+
+        const amountPaid = Number(paymentAmount || 0);
+        if (!Number.isFinite(amountPaid) || amountPaid < 0) {
+            Alert.alert('Invalid payment', 'Please enter a valid amount paid.');
+            return;
+        }
+
+        try {
+            setSavingPayment(true);
+            const result = await updatePosOwnerRequisitionPayment({
+                requisition_id: Number(selectedPaymentItem.server_id),
+                amount_paid: amountPaid,
+            });
+
+            if (!result?.result) {
+                Alert.alert(
+                    'Payment failed',
+                    result?.message || 'Unable to save payment.',
+                );
+                return;
+            }
+
+            const updatedItems = items.map(item => {
+                if (item.id !== selectedPaymentItem.id) return item;
+                const total = Number(item.total_price || item.unit_price * item.quantity || 0);
+                return {
+                    ...item,
+                    amount_paid: amountPaid,
+                    balance: amountPaid - total,
+                };
+            });
+
+            await persistItems(updatedItems);
+            Alert.alert('Payment saved', result.message || 'Payable report updated.');
+            setPaymentModalVisible(false);
+            setSelectedPaymentItem(null);
+            setPaymentAmount('');
+        } catch (error) {
+            console.error('Failed to save owner requisition payment:', error);
+            Alert.alert(
+                'Payment failed',
+                'Unable to save payment. Please check your connection and try again.',
+            );
+        } finally {
+            setSavingPayment(false);
+        }
+    };
+
     const saveItem = async () => {
         const itemName = (
             form.item_name === '__other__'
@@ -156,7 +225,9 @@ const POSOwnerRequisitionTab = () => {
             item_name: itemName,
             quantity,
             unit_price: unitPrice,
+            amount_paid: 0,
             total_price: totalPrice,
+            balance: 0,
             branch_id: branchId,
             branch_name: branchName || 'All branches',
             description: description || 'No remarks provided',
@@ -354,11 +425,22 @@ const POSOwnerRequisitionTab = () => {
                                 </TextComponent>
                                 {hasPrice(item.unit_price) && (
                                     <TextComponent style={styles.itemMeta}>
-                                        Unit: {formatPeso(item.unit_price)} • Total:{' '}
-                                        {formatPeso(
-                                            item.total_price ||
-                                                item.unit_price * item.quantity,
-                                        )}
+                                        Unit: {formatPeso(item.unit_price)}
+                                    </TextComponent>
+                                )}
+                                <TextComponent style={styles.itemMeta}>
+                                    Total: {formatPeso(item.total_price || item.unit_price * item.quantity)}
+                                </TextComponent>
+                                {item.amount_paid > 0 && (
+                                    <TextComponent style={styles.itemMeta}>
+                                        Amount Paid: {formatPeso(item.amount_paid)}
+                                    </TextComponent>
+                                )}
+                                {typeof item.balance === 'number' && item.amount_paid !== undefined && (
+                                    <TextComponent style={styles.itemMeta}>
+                                        {item.balance >= 0
+                                            ? `Change: ${formatPeso(item.balance)}`
+                                            : `Balance: ${formatPeso(Math.abs(item.balance))}`}
                                     </TextComponent>
                                 )}
                             </View>
@@ -425,6 +507,13 @@ const POSOwnerRequisitionTab = () => {
                                 </TextComponent>
                             </TouchableOpacity>
                             <TouchableOpacity
+                                style={[styles.actionBtn, styles.payBtn]}
+                                onPress={() => openPaymentModal(item)}>
+                                <TextComponent style={styles.actionBtnText}>
+                                    Pay
+                                </TextComponent>
+                            </TouchableOpacity>
+                            <TouchableOpacity
                                 style={[styles.actionBtn, styles.rejectBtn]}
                                 onPress={() =>
                                     updateStatus(item.id, 'Rejected')
@@ -442,7 +531,11 @@ const POSOwnerRequisitionTab = () => {
                 )}
             />
 
-            <Modal visible={modalVisible} animationType="slide" transparent>
+            {modalVisible && <Modal
+                visible
+                animationType="slide"
+                transparent
+                onRequestClose={() => setModalVisible(false)}>
                 <View style={styles.modalBackdrop}>
                     <View style={styles.modalBox}>
                         <View style={styles.modalHeader}>
@@ -605,7 +698,58 @@ const POSOwnerRequisitionTab = () => {
                         </TouchableOpacity>
                     </View>
                 </View>
-            </Modal>
+            </Modal>}
+
+            {paymentModalVisible && <Modal
+                visible
+                animationType="slide"
+                transparent
+                onRequestClose={() => setPaymentModalVisible(false)}>
+                <View style={styles.modalBackdrop}>
+                    <View style={styles.modalBox}>
+                        <View style={styles.modalHeader}>
+                            <TextComponent style={styles.modalTitle}>
+                                Owner Payment
+                            </TextComponent>
+                            <TouchableOpacity
+                                onPress={() => setPaymentModalVisible(false)}>
+                                <MaterialCommunityIcons
+                                    name="close"
+                                    size={22}
+                                    color="#0f172a"
+                                />
+                            </TouchableOpacity>
+                        </View>
+                        <TextComponent style={styles.label}>
+                            {selectedPaymentItem?.item_name}
+                        </TextComponent>
+                        <TextComponent style={styles.priceHint}>
+                            Total: {formatPeso(selectedPaymentItem?.total_price || selectedPaymentItem?.unit_price * selectedPaymentItem?.quantity)}
+                        </TextComponent>
+                        <TextInput
+                            placeholder="Amount Paid"
+                            placeholderTextColor="#94a3b8"
+                            keyboardType="numeric"
+                            value={paymentAmount}
+                            onChangeText={text => setPaymentAmount(text)}
+                            style={styles.input}
+                        />
+                        <TextComponent style={styles.summaryLabelSmall}>
+                            {Number(paymentAmount || 0) >= Number(selectedPaymentItem?.total_price || selectedPaymentItem?.unit_price * selectedPaymentItem?.quantity)
+                                ? `Change: ${formatPeso(Number(paymentAmount || 0) - Number(selectedPaymentItem?.total_price || selectedPaymentItem?.unit_price * selectedPaymentItem?.quantity))}`
+                                : `Balance: ${formatPeso(Number(selectedPaymentItem?.total_price || selectedPaymentItem?.unit_price * selectedPaymentItem?.quantity) - Number(paymentAmount || 0))}`}
+                        </TextComponent>
+                        <TouchableOpacity
+                            style={[styles.saveBtn, savingPayment && styles.disabledBtn]}
+                            onPress={savePayment}
+                            disabled={savingPayment}>
+                            <TextComponent style={styles.saveBtnText}>
+                                {savingPayment ? 'Saving...' : 'Save payment'}
+                            </TextComponent>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>}
         </View>
     );
 };
@@ -764,6 +908,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#64748b',
     },
     approveBtn: {backgroundColor: '#16a34a'},
+    payBtn: {backgroundColor: '#0f766e'},
     rejectBtn: {backgroundColor: '#dc2626'},
     actionBtnText: {color: '#ffffff', fontSize: 12, fontWeight: '700'},
     dateText: {marginTop: 10, fontSize: 11, color: '#94a3b8'},
@@ -787,6 +932,7 @@ const styles = StyleSheet.create({
     modalTitle: {fontSize: 18, fontWeight: '800', color: '#0f172a'},
     inputWrap: {marginTop: 12},
     label: {fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: '600'},
+    summaryLabelSmall: {fontSize: 12, color: '#0f172a', marginTop: 10, fontWeight: '700'},
     pickerWrap: {
         borderWidth: 1,
         borderColor: '#e2e8f0',
@@ -814,6 +960,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#0f766e',
     },
     saveBtnText: {color: '#ffffff', fontWeight: '800', fontSize: 14},
+    disabledBtn: {opacity: 0.6},
 });
 
 export default POSOwnerRequisitionTab;

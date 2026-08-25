@@ -299,16 +299,19 @@ CREATE TABLE `employee` (
   `status` int(1) NOT NULL DEFAULT 1 COMMENT '0=inactive;1=active',
   `sss_fund` double DEFAULT 0,
   `allowance_rate` double NOT NULL DEFAULT 0,
-  `bday` varchar(50) DEFAULT NULL
+  `bday` varchar(50) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `address` text DEFAULT NULL,
+  `contact_number` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
 
 --
 -- Dumping data for table `employee`
 --
 
-INSERT INTO `employee` (`id`, `clasification_id`, `employee_no`, `employee_code`, `firstname`, `middlename`, `ext`, `lastname`, `department_id`, `position_id`, `ot_rate`, `salary`, `basic_pay`, `time_in`, `time_out`, `loan`, `loan_deduction`, `sss_no`, `ph_no`, `hdmf_no`, `tin_no`, `loan_id`, `isAutoDeduct`, `weekly_payroll`, `status`, `sss_fund`, `allowance_rate`, `bday`) VALUES
-(22464, 1, '2026-58843', '407975096650', 'mike', 'y', 'n/a', 'mansilao', NULL, 7579, 75, 500, 10000, NULL, NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, 1, 1, 300, 25, '2000-11-27'),
-(22465, 1, '2026-44182', '564312080639', 'ariel', '', '', 'caharian', NULL, 7581, 50, 400, 10000, NULL, NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, 1, 1, 300, 25, '1998-2-27');
+INSERT INTO `employee` (`id`, `clasification_id`, `employee_no`, `employee_code`, `firstname`, `middlename`, `ext`, `lastname`, `department_id`, `position_id`, `ot_rate`, `salary`, `basic_pay`, `time_in`, `time_out`, `loan`, `loan_deduction`, `sss_no`, `ph_no`, `hdmf_no`, `tin_no`, `loan_id`, `isAutoDeduct`, `weekly_payroll`, `status`, `sss_fund`, `allowance_rate`, `bday`, `age`, `address`, `contact_number`) VALUES
+(22464, 1, '2026-58843', '407975096650', 'mike', 'y', 'n/a', 'mansilao', NULL, 7579, 75, 500, 10000, NULL, NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, 1, 1, 300, 25, '2000-11-27', 25, 'Sample address', '09170000000'),
+(22465, 1, '2026-44182', '564312080639', 'ariel', '', '', 'caharian', NULL, 7581, 50, 400, 10000, NULL, NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, 1, 1, 1, 300, 25, '1998-2-27', 27, 'Sample address', '09170000001');
 
 -- --------------------------------------------------------
 
