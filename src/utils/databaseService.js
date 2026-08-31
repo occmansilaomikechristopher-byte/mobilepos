@@ -83,7 +83,7 @@ const initDatabase = () => {
 
                 // Create DTR table
                 tx.executeSql(
-                    `CREATE TABLE IF NOT EXISTS DTR (
+                    `CREATE TABLE IF NOT EXISTS dtr (
                   id INTEGER PRIMARY KEY AUTOINCREMENT,
                   date_from TEXT NOT NULL,
                   date_to TEXT NOT NULL,
@@ -117,7 +117,7 @@ const initDatabase = () => {
                   type TEXT NOT NULL,
                   notes TEXT  NULL,
                   isCheck INTEGER DEFAULT 0 NOT NULL,
-                  FOREIGN KEY (dtr_id) REFERENCES DTR(id)  ON DELETE CASCADE,
+                  FOREIGN KEY (dtr_id) REFERENCES dtr(id)  ON DELETE CASCADE,
                   FOREIGN KEY (employee_id) REFERENCES Employee(id)  ON DELETE CASCADE
                 );`,
                     [],
@@ -562,7 +562,7 @@ async function insertDTRData(datas) {
         db.transaction(
             tx => {
                 tx.executeSql(
-                    `INSERT INTO DTR (date_from, date_to, device_id, status, file, weekly_payroll)
+                    `INSERT INTO dtr (date_from, date_to, device_id, status, file, weekly_payroll)
                      VALUES (?, ?, ?, ?, ?, ?)`,
                     [
                         date_from,
@@ -579,7 +579,7 @@ async function insertDTRData(datas) {
                         dtrDetailsData.forEach(item => {
                             const logs = JSON.stringify(item.logs);
                             tx.executeSql(
-                                `INSERT INTO DTR_details (dtr_id, employee_id, date_time, hours, type, logs, ot, ei)
+                                `INSERT INTO dtr_details (dtr_id, employee_id, date_time, hours, type, logs, ot, ei)
                                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
                                 [
                                     insertId,
@@ -744,7 +744,7 @@ const fetchDTRData = async () => {
     return new Promise((resolve, reject) => {
         database.transaction(tx => {
             tx.executeSql(
-                'SELECT * FROM DTR ORDER BY id DESC',
+                'SELECT * FROM dtr ORDER BY id DESC',
                 [],
                 (tx, results) => {
                     const rows = results.rows;
@@ -769,7 +769,7 @@ const fetchDTRDetailsData = async id => {
     return new Promise((resolve, reject) => {
         database.transaction(tx => {
             tx.executeSql(
-                'SELECT a.*, e.employee_no, m.code, e.lastname, e.firstname, e.middlename  FROM DTR_details AS a INNER JOIN employee AS e ON e.id = a.employee_id INNER JOIN MyEmployee AS m ON m.id = a.employee_id WHERE a.dtr_id = ? ORDER BY date_time ASC',
+                'SELECT a.*, e.employee_no, m.code, e.lastname, e.firstname, e.middlename  FROM dtr_details AS a INNER JOIN employee AS e ON e.id = a.employee_id INNER JOIN MyEmployee AS m ON m.id = a.employee_id WHERE a.dtr_id = ? ORDER BY date_time ASC',
                 [id],
                 (tx, results) => {
                     const rows = results.rows;
@@ -820,7 +820,7 @@ async function deleteMyDTRData(id) {
             tx => {
                 // Step 1: Insert into DTR table
                 tx.executeSql(
-                    'DELETE FROM  DTR  WHERE id = ?',
+                    'DELETE FROM  dtr  WHERE id = ?',
                     [id],
                     (tx, results) => {
                         console.error('DTR DETA DELETED:');
@@ -863,7 +863,7 @@ async function updateMyDTRData(datas) {
                 const parameters = [...Object.values(updateFields), id];
 
                 tx.executeSql(
-                    `UPDATE DTR_details SET ${setClause} WHERE id = ?`,
+                    `UPDATE dtr_details SET ${setClause} WHERE id = ?`,
                     parameters,
                     (tx, results) => {
                         console.info(
@@ -922,7 +922,7 @@ async function updateMyDTRDataArray(records) {
 
                     // Execute SQL
                     tx.executeSql(
-                        `UPDATE DTR_details SET ${setClause} WHERE id = ?`,
+                        `UPDATE dtr_details SET ${setClause} WHERE id = ?`,
                         parameters,
                         () => {
                             console.info(
@@ -958,7 +958,7 @@ async function updateMyDTRDataHours(datas) {
             tx => {
                 // Step 1: Insert into DTR table
                 tx.executeSql(
-                    'UPDATE DTR_details SET hours = ? WHERE id = ?', // Clear SQL statement with parameter placeholders
+                    'UPDATE dtr_details SET hours = ? WHERE id = ?', // Clear SQL statement with parameter placeholders
                     [hours, id], // Array with update data and ID
                     (tx, results) => {
                         console.info(
@@ -992,7 +992,7 @@ async function updateMyDTRDetails(datas) {
             tx => {
                 // Step 1: Insert into DTR table
                 tx.executeSql(
-                    'UPDATE DTR_details SET logs = ?, hours = ? WHERE id = ?',
+                    'UPDATE dtr_details SET logs = ?, hours = ? WHERE id = ?',
                     [logs, hours, id],
                     (tx, results) => {
                         console.info(
@@ -1023,7 +1023,7 @@ async function isertMyDTRDetails(datas) {
         db.transaction(
             tx => {
                 tx.executeSql(
-                    `INSERT INTO DTR_details (dtr_id, employee_id, date_time, hours, type, logs, ot)
+                    `INSERT INTO dtr_details (dtr_id, employee_id, date_time, hours, type, logs, ot)
                                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
                     [id, employee_id, date_time, hours, 'manual', logs, 0],
                     (tx, results) => {
@@ -1056,7 +1056,7 @@ async function deleteMyDTRDetailsData(params) {
             tx => {
                 // Step 1: Insert into DTR table
                 tx.executeSql(
-                    'DELETE FROM  DTR_details  WHERE id = ?',
+                    'DELETE FROM  dtr_details  WHERE id = ?',
                     [id],
                     (tx, results) => {
                         console.log('DTR DTR_details DELETED:');

@@ -4,10 +4,10 @@ import {Platform, StyleSheet} from 'react-native';
 // On Android emulator, use 10.0.2.2 to reach the host machine.
 // On Android device, use the host PC LAN IP directly when on the same network.
 const IOS_DEV_BACKEND_URL = 'http://localhost/payroll/';
-const ANDROID_DEVICE_DEV_BACKEND_URL = 'http://192.168.1.13/payroll/';
-const ANDROID_DEVICE_FALLBACK_BACKEND_URL = 'http://192.168.137.1/payroll/';
+const ANDROID_DEVICE_DEV_BACKEND_URL = 'https://tan-fish-819702.hostingersite.com/api/payroll/';
+const ANDROID_DEVICE_FALLBACK_BACKEND_URL = 'https://tan-fish-819702.hostingersite.com/api/payroll/';
 const ANDROID_EMULATOR_DEV_BACKEND_URL = 'http://10.0.2.2/payroll/';
-const PROD_BACKEND_URL = 'http://192.168.1.13/payroll/';
+const PROD_BACKEND_URL = 'https://tan-fish-819702.hostingersite.com/api/payroll/';
 
 const ANDROID_BACKEND_URLS = [
     ANDROID_DEVICE_DEV_BACKEND_URL,
