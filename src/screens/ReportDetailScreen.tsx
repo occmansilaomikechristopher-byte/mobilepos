@@ -28,6 +28,8 @@ const ReportDetailScreen = ({navigation, route}) => {
             loadReportBranches('payroll');
         } else if (reportId === 'payable') {
             loadReportBranches('payable');
+        } else if (reportId === 'quotations') {
+            loadReportBranches('quotations');
         }
     }, [reportId]);
 
@@ -49,6 +51,9 @@ const ReportDetailScreen = ({navigation, route}) => {
         } else if (reportType === 'payroll') {
             action = 'owner-report-payroll';
             isAggregateOnly = true;
+        } else if (reportType === 'quotations') {
+            action = 'owner-report-quotations';
+            isAggregateOnly = true;
         }
 
         if (!action) {
@@ -62,13 +67,14 @@ const ReportDetailScreen = ({navigation, route}) => {
             const data = response.data;
             if (data?.success) {
                 if (isAggregateOnly) {
-                    setBranches([
-                        {
-                            id: 'all',
-                            branch_name: 'All Branches',
-                            employee_count: data.count || 0,
-                        },
-                    ]);
+                    const aggregateItem = {
+                        id: 'all',
+                        branch_name: 'All Branches',
+                        count: data.count || 0,
+                        total_value: data.total_value ?? data.total ?? 0,
+                        employee_count: data.count || 0,
+                    };
+                    setBranches([aggregateItem]);
                 } else {
                     setBranches(data.branches || []);
                 }
@@ -99,6 +105,9 @@ const ReportDetailScreen = ({navigation, route}) => {
         if (reportId === 'payroll') {
             return 'Active employee count for all branches.';
         }
+        if (reportId === 'quotations') {
+            return 'Quotation count and total value across all branches.';
+        }
         return 'Detailed owner report details will appear here for the selected report.';
     };
 
@@ -124,6 +133,12 @@ const ReportDetailScreen = ({navigation, route}) => {
         if (reportId === 'payroll') {
             return `${Number(item.employee_count || 0).toLocaleString('en-PH')}`;
         }
+        if (reportId === 'quotations') {
+            return `₱${Number(item.total_value || 0).toLocaleString('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            })}`;
+        }
         return '-';
     };
 
@@ -133,6 +148,7 @@ const ReportDetailScreen = ({navigation, route}) => {
         if (reportId === 'attendance') return 'Attendance';
         if (reportId === 'payable') return 'Payables';
         if (reportId === 'payroll') return 'Employees';
+        if (reportId === 'quotations') return 'Total Value';
         return 'Value';
     };
 
@@ -172,7 +188,7 @@ const ReportDetailScreen = ({navigation, route}) => {
                 <TextComponent style={styles.sectionTitle}>
                     {title}
                 </TextComponent>
-                {['sales', 'inventory', 'attendance', 'payable', 'payroll'].includes(reportId) ? (
+                {['sales', 'inventory', 'attendance', 'payable', 'payroll', 'quotations'].includes(reportId) ? (
                     <>
                         <TextComponent style={styles.sectionSubtitle}>
                             {getReportSubtitle()}

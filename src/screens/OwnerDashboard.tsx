@@ -44,6 +44,8 @@ const OwnerDashboard = ({navigation}) => {
             let employeeCount = 0;
             let payableCount = 0;
             let totalPayable = 0;
+            let quotationCount = 0;
+            let quotationTotal = 0;
 
             try {
                 // Fetch sales data
@@ -111,6 +113,20 @@ const OwnerDashboard = ({navigation}) => {
                 console.error('Error fetching payable:', e);
             }
 
+            try {
+                // Fetch quotation data
+                const quotationRes = await axiosConfig.get(
+                    '?action=owner-report-quotations',
+                );
+                const quotationData = quotationRes.data;
+                if (quotationData.success) {
+                    quotationCount = quotationData.count || 0;
+                    quotationTotal = quotationData.total || 0;
+                }
+            } catch (e) {
+                console.error('Error fetching quotations:', e);
+            }
+
             // Update report cards with real data
             setReports([
                 {
@@ -156,6 +172,16 @@ const OwnerDashboard = ({navigation}) => {
                     value: employeeCount.toString(),
                     description: 'Active Employees',
                     color: '#8b5cf6',
+                },
+                {
+                    id: 'quotations',
+                    title: 'Quotations Report',
+                    icon: 'file-document-outline',
+                    value: quotationCount.toString(),
+                    description: `₱${quotationTotal.toLocaleString('en-PH', {
+                        maximumFractionDigits: 2,
+                    })} total value`,
+                    color: '#ec4899',
                 },
             ]);
         } catch (error) {

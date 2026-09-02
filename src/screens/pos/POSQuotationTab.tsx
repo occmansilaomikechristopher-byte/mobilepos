@@ -68,12 +68,7 @@ const POSQuotationTab = () => {
     const [products, setProducts] = useState<any[]>([]);
     const [quotes, setQuotes] = useState<any[]>([]);
     const [productId, setProductId] = useState(0);
-    
-    // Customer Information
-    const [customerName, setCustomerName] = useState('');
-    const [customerEmail, setCustomerEmail] = useState('');
-    const [customerPhone, setCustomerPhone] = useState('');
-    
+
     // Product Specifications
     const [frame, setFrame] = useState(choices.frame[0]);
     const [unit, setUnit] = useState('IN');
@@ -288,19 +283,15 @@ const POSQuotationTab = () => {
         if (!cart.length || quotationSummary.total <= 0) {
             return Alert.alert('Quotation', 'Please add items to your quotation before saving.');
         }
-        
-        if (!customerName.trim()) {
-            return Alert.alert('Customer Info', 'Please enter customer name.');
-        }
 
         setSaving(true);
         try {
             const result = await savePosQuotation({
-                customer_name: customerName,
+                customer_name: 'Walk-in Customer',
                 discount: quotationSummary.discountAmount,
                 items: cart,
             });
-            
+
             if (!result?.result) {
                 throw new Error(result?.message || 'Unable to save quotation');
             }
@@ -309,12 +300,9 @@ const POSQuotationTab = () => {
                 'Quotation Saved',
                 `Quotation #${result.quotation_no} saved successfully!`,
             );
-            
+
             // Reset form
             setCart([]);
-            setCustomerName('');
-            setCustomerEmail('');
-            setCustomerPhone('');
             setQuotes(await fetchPosQuotations());
         } catch (error: any) {
             Alert.alert('Error', error.message || 'Unable to save quotation.');
@@ -439,34 +427,6 @@ const POSQuotationTab = () => {
                 <TextComponent style={styles.headerSubtitle}>
                     Glass & Aluminum Supply Management
                 </TextComponent>
-            </View>
-
-            {/* Customer Information Section */}
-            <View style={styles.card}>
-                <TextComponent style={styles.sectionTitle}>👤 Customer Information</TextComponent>
-                <TextInput
-                    placeholder="Customer Name *"
-                    value={customerName}
-                    onChangeText={setCustomerName}
-                    style={styles.input}
-                    placeholderTextColor="#b0b0b0"
-                />
-                <TextInput
-                    placeholder="Email (Optional)"
-                    value={customerEmail}
-                    onChangeText={setCustomerEmail}
-                    style={[styles.input, {marginTop: 10}]}
-                    placeholderTextColor="#b0b0b0"
-                    keyboardType="email-address"
-                />
-                <TextInput
-                    placeholder="Phone (Optional)"
-                    value={customerPhone}
-                    onChangeText={setCustomerPhone}
-                    style={[styles.input, {marginTop: 10}]}
-                    placeholderTextColor="#b0b0b0"
-                    keyboardType="phone-pad"
-                />
             </View>
 
             {/* Product Selection */}
@@ -808,7 +768,7 @@ const POSQuotationTab = () => {
                     <TouchableOpacity
                         style={[styles.saveQuotationButton, saving && styles.buttonDisabled]}
                         onPress={saveQuotation}
-                        disabled={saving || !customerName.trim()}
+                        disabled={saving}
                     >
                         <MaterialCommunityIcons name="content-save" size={20} color="#fff" />
                         <TextComponent style={styles.buttonText}>
