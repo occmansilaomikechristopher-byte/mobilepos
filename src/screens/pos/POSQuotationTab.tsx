@@ -50,7 +50,6 @@ import {
  */
 
 const choices = {
-    frame: ['UPVC White Frame', 'UPVC Brown Frame'],
     unit: ['MM', 'CM', 'IN', 'Ft', 'M'],
     design: ['None', 'French Type Design'],
     glassType: ['6mm Clear', '8mm Clear', '6mm Tinted', '8mm Tinted', '6mm Reflective', 'Tempered'],
@@ -70,7 +69,6 @@ const POSQuotationTab = () => {
     const [productId, setProductId] = useState(0);
 
     // Product Specifications
-    const [frame, setFrame] = useState(choices.frame[0]);
     const [unit, setUnit] = useState('IN');
     const [design, setDesign] = useState('None');
     const [glassType, setGlassType] = useState(choices.glassType[0]);
@@ -91,6 +89,7 @@ const POSQuotationTab = () => {
     
     // UI State
     const [cart, setCart] = useState<any[]>([]);
+    const [priceOverrides, setPriceOverrides] = useState<Record<string, string>>({});
     const [lineItems, setLineItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -217,8 +216,20 @@ const POSQuotationTab = () => {
             });
         }
 
+        const pricedItems = items.map(item => {
+            const override = priceOverrides[item.id];
+            const unitPrice = override === undefined || override === ''
+                ? Number(item.unitPrice)
+                : Math.max(0, Number(override) || 0);
+            return {
+                ...item,
+                unitPrice,
+                lineTotal: unitPrice * Number(item.quantity || 0),
+            };
+        });
+
         // Calculate totals
-        const subtotal = calculateSubtotal(items);
+        const subtotal = calculateSubtotal(pricedItems);
         const discountAmount = calculateDiscount(
             subtotal,
             discountType,
@@ -228,7 +239,7 @@ const POSQuotationTab = () => {
         const total = calculateTotal(subtotal, discountAmount, taxAmount);
 
         return {
-            lineItems: items,
+            lineItems: pricedItems,
             subtotal,
             discountAmount,
             taxAmount,
@@ -249,7 +260,19 @@ const POSQuotationTab = () => {
         discountType,
         discountValue,
         taxPercentage,
+        priceOverrides,
     ]);
+
+    const updateLinePrice = (lineId: string, value: string) => {
+        setPriceOverrides(current => ({...current, [lineId]: value}));
+    };
+
+    const normalizeLinePrice = (lineId: string) => {
+        setPriceOverrides(current => {
+            const value = Number(current[lineId]);
+            return {...current, [lineId]: Number.isFinite(value) ? value.toFixed(2) : '0.00'};
+        });
+    };
 
     const money = (value: number) => formatCurrency(value);
 
@@ -263,7 +286,7 @@ const POSQuotationTab = () => {
             product_name: selectedProduct.product_name,
             price: quotationSummary.total,
             qty: 1,
-            description: `${frame}, ${glassType}, ${width}×${height}${unit}, ${design}`,
+            description: `${glassType}, ${width}×${height}${unit}, ${design}`,
             lineItems: quotationSummary.lineItems,
         };
         
@@ -287,7 +310,6 @@ const POSQuotationTab = () => {
         setSaving(true);
         try {
             const result = await savePosQuotation({
-                customer_name: 'Walk-in Customer',
                 discount: quotationSummary.discountAmount,
                 items: cart,
             });
@@ -335,9 +357,18 @@ const POSQuotationTab = () => {
             <TextComponent style={styles.lineItemDesc}>{item.description}</TextComponent>
             <View style={styles.lineItemFooter}>
                 <TextComponent style={styles.lineItemQty}>Qty: {item.quantity}</TextComponent>
-                <TextComponent style={styles.lineItemUnit}>
-                    {money(item.unitPrice)} each
-                </TextComponent>
+                <View style={styles.editablePriceBox}>
+                    <TextComponent style={styles.priceCurrency}>₱</TextComponent>
+                    <TextInput
+                        value={priceOverrides[item.id] ?? Number(item.unitPrice).toFixed(2)}
+                        onChangeText={value => updateLinePrice(item.id, value)}
+                        onBlur={() => normalizeLinePrice(item.id)}
+                        keyboardType="decimal-pad"
+                        style={styles.linePriceInput}
+                        selectTextOnFocus
+                    />
+                    <TextComponent style={styles.lineItemUnit}> each</TextComponent>
+                </View>
             </View>
         </View>
     );
@@ -385,7 +416,7 @@ const POSQuotationTab = () => {
                 <View style={{flex: 1}}>
                     <TextComponent style={styles.quoteNo}>{quote.quotation_no}</TextComponent>
                     <TextComponent style={styles.quoteDetails}>
-                        {quote.customer_name || 'No Customer'} • {quote.status}
+                        Created quotation
                     </TextComponent>
                 </View>
                 <TextComponent style={styles.quoteTotal}>{money(Number(quote.total))}</TextComponent>
@@ -450,31 +481,6 @@ const POSQuotationTab = () => {
             <View style={styles.card}>
                 <TextComponent style={styles.sectionTitle}>🎨 Frame & Glass Specifications</TextComponent>
                 
-                <TextComponent style={styles.sectionLabel}>
-                    Frame Color <TextComponent style={styles.required}>*</TextComponent>
-                </TextComponent>
-                <View style={styles.optionsGrid}>
-                    {choices.frame.map(value => (
-                        <TouchableOpacity
-                            key={value}
-                            style={[
-                                styles.optionButton,
-                                frame === value && styles.optionButtonActive,
-                            ]}
-                            onPress={() => setFrame(value)}
-                        >
-                            <TextComponent
-                                style={[
-                                    styles.optionText,
-                                    frame === value && styles.optionTextActive,
-                                ]}
-                            >
-                                {value}
-                            </TextComponent>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-
                 <TextComponent style={styles.sectionLabel}>
                     Glass Type <TextComponent style={styles.required}>*</TextComponent>
                 </TextComponent>
@@ -1081,6 +1087,29 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: '600',
         color: '#0f766e',
+    },
+    editablePriceBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#0f766e',
+        borderRadius: 6,
+        paddingLeft: 6,
+        backgroundColor: '#ffffff',
+    },
+    priceCurrency: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: '#0f766e',
+    },
+    linePriceInput: {
+        minWidth: 70,
+        paddingHorizontal: 5,
+        paddingVertical: 4,
+        color: '#0f172a',
+        fontSize: 11,
+        fontWeight: '700',
+        textAlign: 'right',
     },
 
     // Summary

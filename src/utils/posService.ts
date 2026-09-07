@@ -116,16 +116,13 @@ export interface PosQuotationItem extends CartItem {
 export interface PosQuotation {
     id: number;
     quotation_no: string;
-    customer_name: string;
     subtotal: string;
     discount: string;
     total: string;
-    status: string;
     created_at: string;
 }
 
 export const savePosQuotation = async (payload: {
-    customer_name: string;
     discount: number;
     items: PosQuotationItem[];
 }) => {

@@ -69,7 +69,7 @@ const ReportDetailScreen = ({navigation, route}) => {
                 if (isAggregateOnly) {
                     const aggregateItem = {
                         id: 'all',
-                        branch_name: 'All Branches',
+                        branch_name: data.branch_name || 'Main Branch',
                         count: data.count || 0,
                         total_value: data.total_value ?? data.total ?? 0,
                         employee_count: data.count || 0,
@@ -106,7 +106,7 @@ const ReportDetailScreen = ({navigation, route}) => {
             return 'Active employee count for all branches.';
         }
         if (reportId === 'quotations') {
-            return 'Quotation count and total value across all branches.';
+            return 'Quotation count and total value for the Main Branch.';
         }
         return 'Detailed owner report details will appear here for the selected report.';
     };
