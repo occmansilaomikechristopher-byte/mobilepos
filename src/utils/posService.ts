@@ -123,21 +123,28 @@ export interface PosQuotation {
 }
 
 export const savePosQuotation = async (payload: {
+    branch_id: number;
     discount: number;
+    tax_percentage: number;
+    tax: number;
     items: PosQuotationItem[];
 }) => {
     const res = await axiosConfig.post('?action=save_pos_quotation', payload);
     return res.data;
 };
 
-export const fetchPosQuotations = async (): Promise<PosQuotation[]> => {
-    const res = await axiosConfig.get('?action=get_pos_quotations');
+export const fetchPosQuotations = async (branchId?: number): Promise<PosQuotation[]> => {
+    const query = branchId && branchId > 0
+        ? `?action=get_pos_quotations&branch_id=${branchId}`
+        : '?action=get_pos_quotations';
+    const res = await axiosConfig.get(query);
     return res.data?.quotations || [];
 };
 
-export const fetchPosQuotationDetails = async (quotationId: number) => {
+export const fetchPosQuotationDetails = async (quotationId: number, branchId: number) => {
     const res = await axiosConfig.post('?action=get_pos_quotation_details', {
         quotation_id: quotationId,
+        branch_id: branchId,
     });
     return res.data?.result ? res.data : null;
 };

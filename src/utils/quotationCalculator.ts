@@ -251,10 +251,12 @@ export const calculateDiscount = (
     discountType: 'fixed' | 'percentage',
     discountValue: number,
 ): number => {
+    const safeSubtotal = Math.max(0, Number(subtotal) || 0);
+    const safeValue = Math.max(0, Number(discountValue) || 0);
     if (discountType === 'fixed') {
-        return Math.min(discountValue, subtotal);
+        return Math.min(safeValue, safeSubtotal);
     }
-    return (subtotal * discountValue) / 100;
+    return (safeSubtotal * Math.min(safeValue, 100)) / 100;
 };
 
 /**
@@ -265,8 +267,8 @@ export const calculateTax = (
     taxPercentage: number,
     discountAmount: number,
 ): number => {
-    const taxableAmount = subtotal - discountAmount;
-    return (taxableAmount * taxPercentage) / 100;
+    const taxableAmount = Math.max(0, (Number(subtotal) || 0) - (Number(discountAmount) || 0));
+    return (taxableAmount * Math.max(0, Number(taxPercentage) || 0)) / 100;
 };
 
 /**
@@ -277,7 +279,40 @@ export const calculateTotal = (
     discountAmount: number,
     taxAmount: number,
 ): number => {
-    return subtotal - discountAmount + taxAmount;
+    return Math.max(0, (Number(subtotal) || 0) - (Number(discountAmount) || 0) + (Number(taxAmount) || 0));
+};
+
+export interface QuotationTotalLine {
+    price: number;
+    qty: number;
+}
+
+export interface QuotationTotals {
+    subtotal: number;
+    discountAmount: number;
+    taxAmount: number;
+    total: number;
+}
+
+/** Calculate one quotation's totals from its un-discounted line prices. */
+export const calculateQuotationTotals = (
+    lines: QuotationTotalLine[],
+    discountType: 'fixed' | 'percentage',
+    discountValue: number,
+    taxPercentage: number,
+): QuotationTotals => {
+    const subtotal = lines.reduce(
+        (sum, line) => sum + Math.max(0, Number(line.price) || 0) * Math.max(0, Number(line.qty) || 0),
+        0,
+    );
+    const discountAmount = calculateDiscount(subtotal, discountType, discountValue);
+    const taxAmount = calculateTax(subtotal, taxPercentage, discountAmount);
+    return {
+        subtotal,
+        discountAmount,
+        taxAmount,
+        total: calculateTotal(subtotal, discountAmount, taxAmount),
+    };
 };
 
 /**

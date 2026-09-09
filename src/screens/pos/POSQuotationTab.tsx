@@ -31,6 +31,7 @@ import {
     calculateDiscount,
     calculateTax,
     calculateTotal,
+    calculateQuotationTotals,
     formatCurrency,
     generateLineItems,
 } from '../../utils/quotationCalculator';
@@ -67,6 +68,7 @@ const POSQuotationTab = () => {
     const [products, setProducts] = useState<any[]>([]);
     const [quotes, setQuotes] = useState<any[]>([]);
     const [productId, setProductId] = useState(0);
+    const [branchId, setBranchId] = useState(0);
 
     // Product Specifications
     const [unit, setUnit] = useState('IN');
@@ -99,9 +101,10 @@ const POSQuotationTab = () => {
         (async () => {
             try {
                 const branchId = Number(await AsyncStorage.getItem('branch_id')) || 0;
+                setBranchId(branchId);
                 const [items, saved] = await Promise.all([
                     fetchPosProducts(branchId),
-                    fetchPosQuotations(),
+                    fetchPosQuotations(branchId),
                 ]);
                 setProducts(items);
                 setQuotes(saved);
@@ -276,6 +279,13 @@ const POSQuotationTab = () => {
 
     const money = (value: number) => formatCurrency(value);
 
+    const cartSummary = useMemo(() => calculateQuotationTotals(
+        cart,
+        discountType,
+        Number(discountValue) || 0,
+        Number(taxPercentage) || 0,
+    ), [cart, discountType, discountValue, taxPercentage]);
+
     const addToQuotation = () => {
         if (!selectedProduct || quotationSummary.total <= 0) {
             return Alert.alert('Quotation', 'Please select a product and enter valid dimensions.');
@@ -284,7 +294,8 @@ const POSQuotationTab = () => {
         const quotationItem = {
             product_id: Number(selectedProduct.id),
             product_name: selectedProduct.product_name,
-            price: quotationSummary.total,
+            // Store the raw line amount. Discount and tax apply once to the cart.
+            price: quotationSummary.subtotal,
             qty: 1,
             description: `${glassType}, ${width}×${height}${unit}, ${design}`,
             lineItems: quotationSummary.lineItems,
@@ -303,14 +314,17 @@ const POSQuotationTab = () => {
     };
 
     const saveQuotation = async () => {
-        if (!cart.length || quotationSummary.total <= 0) {
+        if (!cart.length || branchId <= 0 || cartSummary.subtotal <= 0) {
             return Alert.alert('Quotation', 'Please add items to your quotation before saving.');
         }
 
         setSaving(true);
         try {
             const result = await savePosQuotation({
-                discount: quotationSummary.discountAmount,
+                branch_id: branchId,
+                discount: cartSummary.discountAmount,
+                tax_percentage: Number(taxPercentage) || 0,
+                tax: cartSummary.taxAmount,
                 items: cart,
             });
 
@@ -325,7 +339,7 @@ const POSQuotationTab = () => {
 
             // Reset form
             setCart([]);
-            setQuotes(await fetchPosQuotations());
+            setQuotes(await fetchPosQuotations(branchId));
         } catch (error: any) {
             Alert.alert('Error', error.message || 'Unable to save quotation.');
         } finally {
@@ -768,7 +782,7 @@ const POSQuotationTab = () => {
                     <View style={styles.finalSummaryRow}>
                         <TextComponent style={styles.finalLabel}>Final Total:</TextComponent>
                         <TextComponent style={styles.finalTotal}>
-                            {money(cart.reduce((sum, item) => sum + item.price, 0))}
+                            {money(cartSummary.total)}
                         </TextComponent>
                     </View>
                     <TouchableOpacity
