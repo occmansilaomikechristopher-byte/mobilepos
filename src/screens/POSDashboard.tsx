@@ -31,7 +31,10 @@ import POSDamageTab from './pos/POSDamageTab';
 import POSOwnerRequisitionTab from './pos/POSOwnerRequisitionTab';
 import NewOrderTab from './NewOrderTab';
 import {getTabConfig} from './pos/tabConfig';
-import useNotificationList from '../hooks/useNotificationList';
+import useNotificationList, {
+    getUnreadNotificationCount,
+    markNotificationsRead,
+} from '../hooks/useNotificationList';
 import axiosConfig from '../utils/axiosConfig';
 import {useQueryClient} from 'react-query';
 import {showMessage} from 'react-native-flash-message';
@@ -214,6 +217,36 @@ const POSDashboard = ({navigation}: Props) => {
     const [newNotificationCount, setNewNotificationCount] = useState(0);
     const {data: notifications = [], isLoading: notificationsLoading} = useNotificationList();
 
+    const markVisibleNotificationsRead = async () => {
+        const unreadIds = notifications
+            .filter(notification => Number(notification?.is_read) !== 1 && notification?.id)
+            .map(notification => Number(notification.id));
+        if (unreadIds.length === 0) {
+            setNewNotificationCount(0);
+            return;
+        }
+
+        setNewNotificationCount(0);
+        queryClient.setQueryData(['notification-list'], current =>
+            (current || []).map(notification =>
+                unreadIds.includes(Number(notification.id))
+                    ? {...notification, is_read: 1}
+                    : notification,
+            ),
+        );
+        try {
+            await markNotificationsRead(unreadIds);
+        } catch (error) {
+            console.error('❌ markNotificationsRead Error:', error);
+            queryClient.invalidateQueries(['notification-list']);
+            showMessage({
+                message: 'Could not save notification status',
+                type: 'danger',
+                duration: 3000,
+            });
+        }
+    };
+
     const deleteNotification = async (notificationId: number) => {
         try {
             const {status, data} = await axiosConfig.post(
@@ -247,10 +280,11 @@ const POSDashboard = ({navigation}: Props) => {
         if (!initialLoadDone) {
             setLastNotificationId(latest.id);
             setInitialLoadDone(true);
+            setNewNotificationCount(getUnreadNotificationCount(notifications));
             return;
         }
 
-        if (latest.id !== lastNotificationId) {
+        if (latest.id !== lastNotificationId && Number(latest.is_read) !== 1) {
             showMessage({
                 message: latest.title || 'New product notification',
                 description: latest.message || 'A new product was added in main branch.',
@@ -266,9 +300,9 @@ const POSDashboard = ({navigation}: Props) => {
                 }
             }
             setLastNotificationId(latest.id);
-            setNewNotificationCount(1);
         }
-    }, [notifications, initialLoadDone, lastNotificationId]);
+        setNewNotificationCount(getUnreadNotificationCount(notifications));
+    }, [notifications, initialLoadDone, lastNotificationId, isCashier]);
 
     useEffect(() => {
         AsyncStorage.multiGet(['name', 'branch_name']).then(pairs => {
@@ -321,7 +355,7 @@ const POSDashboard = ({navigation}: Props) => {
                                 if (notifications.length > 0) {
                                     setLastNotificationId(notifications[0].id);
                                 }
-                                setNewNotificationCount(0);
+                                markVisibleNotificationsRead();
                                 setNotificationOpen(true);
                             }}>
                             <MaterialCommunityIcons
@@ -395,8 +429,6 @@ const POSDashboard = ({navigation}: Props) => {
                             </TextComponent>
                             <TouchableOpacity
                                 onPress={() => {
-                                    queryClient.removeQueries(['notifications']);
-                                    queryClient.removeQueries(['notification-list']);
                                     setNotificationOpen(false);
                                 }}>
                                 <MaterialCommunityIcons
