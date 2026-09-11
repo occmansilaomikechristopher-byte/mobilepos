@@ -5,6 +5,7 @@ import {
     calculateTotal,
     convertToSquareMeters,
     calculatePerimeter,
+    calculateQuotationEstimate,
 } from '../src/utils/quotationCalculator';
 
 describe('quotation calculator', () => {
@@ -36,5 +37,37 @@ describe('quotation calculator', () => {
             taxAmount: 228,
             total: 2128,
         });
+    });
+
+    it('prices glass options, add-ons, and delivery installation from dimensions', () => {
+        const supplyOnly = calculateQuotationEstimate({
+            basePrice: 1000,
+            width: 100,
+            height: 100,
+            unit: 'CM',
+            panelCount: 1,
+            thickness: 6,
+            glassColor: 'Clear',
+            design: 'None',
+            serviceMode: 'Supply Only',
+        });
+        const delivered = calculateQuotationEstimate({
+            basePrice: 1000,
+            width: 100,
+            height: 100,
+            unit: 'CM',
+            panelCount: 2,
+            thickness: 8,
+            glassColor: 'Mirror',
+            design: 'French Type Design',
+            addOns: ['Mosquito Screen'],
+            serviceMode: 'Delivery & Installation',
+        });
+
+        expect(supplyOnly.subtotal).toBe(3000);
+        expect(delivered.subtotal).toBeGreaterThan(supplyOnly.subtotal);
+        expect(delivered.serviceCost).toBe(1750);
+        expect(delivered.designCost).toBe(3000);
+        expect(delivered.addOnCost).toBe(1300);
     });
 });

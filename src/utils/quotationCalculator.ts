@@ -294,6 +294,100 @@ export interface QuotationTotals {
     total: number;
 }
 
+export type GlassThickness = 5 | 6 | 8;
+export type GlassColor = 'Clear' | 'Dark Gray' | 'Bronze' | 'Reflective' | 'Mirror' | 'Smoke Glass';
+export type QuotationServiceMode = 'Supply Only' | 'Delivery & Installation';
+
+export interface QuotationEstimateOptions {
+    basePrice: number;
+    width: number;
+    height: number;
+    unit: QuotationDimensions['unit'];
+    panelCount: number;
+    thickness: GlassThickness;
+    glassColor: GlassColor;
+    design?: string;
+    addOns?: string[];
+    serviceMode?: QuotationServiceMode;
+    measurementRequired?: boolean;
+}
+
+export interface QuotationEstimate {
+    glassCost: number;
+    aluminumCost: number;
+    designCost: number;
+    addOnCost: number;
+    serviceCost: number;
+    measurementCost: number;
+    subtotal: number;
+    squareMeters: number;
+    perimeterMeters: number;
+}
+
+/**
+ * Estimate a GV Aluminum and Glass Supply window quotation from the selected
+ * product, material options, dimensions, and service choices.
+ */
+export const calculateQuotationEstimate = ({
+    basePrice,
+    width,
+    height,
+    unit,
+    panelCount,
+    thickness,
+    glassColor,
+    design = 'None',
+    addOns = [],
+    serviceMode = 'Supply Only',
+    measurementRequired = false,
+}: QuotationEstimateOptions): QuotationEstimate => {
+    const safePanels = Math.max(1, Number(panelCount) || 1);
+    const squareMeters = convertToSquareMeters(width, height, unit);
+    const perimeterMeters = calculatePerimeter(width, height, unit);
+    const thicknessMultiplier: Record<GlassThickness, number> = {5: 0.9, 6: 1, 8: 1.25};
+    const colorMultiplier: Record<GlassColor, number> = {
+        Clear: 1,
+        'Dark Gray': 1.15,
+        Bronze: 1.15,
+        Reflective: 1.3,
+        Mirror: 1.4,
+        'Smoke Glass': 1.2,
+    };
+    const designPrices: Record<string, number> = {
+        None: 0,
+        'French Type Design': 1500,
+        'Etched Design': 1800,
+        'Grid Design': 1200,
+    };
+    const addOnPrices: Record<string, number> = {
+        'Mosquito Screen': 650,
+        'Handle & Lock Set': 350,
+        'Rubber Seal Upgrade': 250,
+    };
+
+    const safeBasePrice = Math.max(0, Number(basePrice) || 0);
+    const glassCost = safeBasePrice * squareMeters * thicknessMultiplier[thickness] * colorMultiplier[glassColor] * safePanels;
+    const aluminumCost = safeBasePrice * 0.5 * perimeterMeters * safePanels;
+    const designCost = (designPrices[design] || 0) * safePanels;
+    const addOnCost = addOns.reduce((sum, addOn) => sum + (addOnPrices[addOn] || 0) * safePanels, 0);
+    const serviceCost = serviceMode === 'Delivery & Installation'
+        ? 750 + (500 * safePanels)
+        : 0;
+    const measurementCost = measurementRequired ? 300 : 0;
+
+    return {
+        glassCost,
+        aluminumCost,
+        designCost,
+        addOnCost,
+        serviceCost,
+        measurementCost,
+        subtotal: glassCost + aluminumCost + designCost + addOnCost + serviceCost + measurementCost,
+        squareMeters,
+        perimeterMeters,
+    };
+};
+
 /** Calculate one quotation's totals from its un-discounted line prices. */
 export const calculateQuotationTotals = (
     lines: QuotationTotalLine[],

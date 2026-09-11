@@ -21,19 +21,13 @@ import {
     savePosQuotation,
 } from '../../utils/posService';
 import {
-    convertToSquareMeters,
-    calculatePerimeter,
-    calculateGlassCost,
-    calculateAluminumCost,
-    calculateLaborCost,
-    calculateAccessoriesCost,
     calculateSubtotal,
     calculateDiscount,
     calculateTax,
     calculateTotal,
     calculateQuotationTotals,
+    calculateQuotationEstimate,
     formatCurrency,
-    generateLineItems,
 } from '../../utils/quotationCalculator';
 
 /**
@@ -52,16 +46,11 @@ import {
 
 const choices = {
     unit: ['MM', 'CM', 'IN', 'Ft', 'M'],
-    design: ['None', 'French Type Design'],
-    glassType: ['6mm Clear', '8mm Clear', '6mm Tinted', '8mm Tinted', '6mm Reflective', 'Tempered'],
+    design: ['None', 'French Type Design', 'Etched Design', 'Grid Design'],
+    thickness: ['5mm', '6mm', '8mm'],
+    glassColor: ['Clear', 'Dark Gray', 'Bronze', 'Reflective', 'Mirror', 'Smoke Glass'],
+    addOns: ['Mosquito Screen', 'Handle & Lock Set', 'Rubber Seal Upgrade'],
     aluminumProfile: ['Standard Frame', 'Heavy Duty Frame', 'Slim Frame', 'Custom Profile'],
-};
-
-const laborConfig = {
-    hourlyRate: 350,
-    installationFeePerPanel: 500,
-    designCustomizationFee: 1500,
-    measurementFee: 300,
 };
 
 const POSQuotationTab = () => {
@@ -73,15 +62,16 @@ const POSQuotationTab = () => {
     // Product Specifications
     const [unit, setUnit] = useState('IN');
     const [design, setDesign] = useState('None');
-    const [glassType, setGlassType] = useState(choices.glassType[0]);
+    const [glassThickness, setGlassThickness] = useState(choices.thickness[1]);
+    const [glassColor, setGlassColor] = useState(choices.glassColor[0]);
     const [aluminumProfile, setAluminumProfile] = useState(choices.aluminumProfile[0]);
     const [width, setWidth] = useState('48');
     const [height, setHeight] = useState('48');
     const [panelCount, setPanelCount] = useState('1');
     
     // Labor & Customization Options
-    const [installationRequired, setInstallationRequired] = useState(false);
-    const [customDesignRequired, setCustomDesignRequired] = useState(false);
+    const [serviceMode, setServiceMode] = useState<'Supply Only' | 'Delivery & Installation'>('Supply Only');
+    const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
     const [measurementRequired, setMeasurementRequired] = useState(false);
     
     // Pricing Configuration
@@ -131,91 +121,90 @@ const POSQuotationTab = () => {
             };
         }
 
-        // Calculate areas and perimeters
-        const squareMeters = convertToSquareMeters(
-            Number(width),
-            Number(height),
-            unit as any,
-        );
-        const perimeterMeters = calculatePerimeter(
-            Number(width),
-            Number(height),
-            unit as any,
-        );
-
-        // Mock glass and aluminum pricing (would come from database in real app)
-        const glassPrice = Number(selectedProduct.unit_price || 0);
-        const aluminumPrice = glassPrice * 0.5;
+        const estimate = calculateQuotationEstimate({
+            basePrice: Number(selectedProduct.unit_price || 0),
+            width: Number(width),
+            height: Number(height),
+            unit: unit as any,
+            panelCount: Number(panelCount),
+            thickness: Number(glassThickness.replace('mm', '')) as 5 | 6 | 8,
+            glassColor: glassColor as any,
+            design,
+            addOns: selectedAddOns,
+            serviceMode,
+            measurementRequired,
+        });
 
         // Generate line items
         const items: any[] = [];
 
         // Glass line item
-        const glassCost = glassPrice * squareMeters * (design !== 'None' ? 1.1 : 1.0);
         items.push({
             id: `glass-1`,
             type: 'glass',
-            name: `${glassType} Glass Panel`,
+            name: `${glassThickness} ${glassColor} Glass Panel`,
             quantity: Number(panelCount),
-            unitPrice: glassCost / Number(panelCount),
-            description: `${width} × ${height} ${unit} | ${squareMeters.toFixed(2)}m²`,
-            lineTotal: glassCost,
+            unitPrice: estimate.glassCost / Number(panelCount),
+            description: `${width} × ${height} ${unit} | ${estimate.squareMeters.toFixed(2)}m²`,
+            lineTotal: estimate.glassCost,
         });
 
         // Aluminum line item
-        const aluminumCost = aluminumPrice * perimeterMeters;
         items.push({
             id: `aluminum-1`,
             type: 'aluminum',
             name: `${aluminumProfile} - Aluminum Bar`,
             quantity: 1,
-            unitPrice: aluminumCost,
-            description: `Perimeter: ${perimeterMeters.toFixed(2)}m`,
-            lineTotal: aluminumCost,
+            unitPrice: estimate.aluminumCost,
+            description: `Perimeter: ${estimate.perimeterMeters.toFixed(2)}m`,
+            lineTotal: estimate.aluminumCost,
         });
 
-        // Labor costs
-        const laborCosts = calculateLaborCost(
-            laborConfig,
-            Number(panelCount),
-            installationRequired,
-            customDesignRequired,
-            measurementRequired,
-        );
-
-        if (laborCosts.installation > 0) {
+        if (estimate.serviceCost > 0) {
             items.push({
-                id: 'labor-installation',
+                id: 'service-delivery-installation',
                 type: 'labor',
-                name: 'Installation Labor',
-                quantity: Number(panelCount),
-                unitPrice: laborConfig.installationFeePerPanel,
-                description: `Professional installation service`,
-                lineTotal: laborCosts.installation,
+                name: 'Delivery & Installation',
+                quantity: 1,
+                unitPrice: estimate.serviceCost,
+                description: 'Delivery and professional installation service',
+                lineTotal: estimate.serviceCost,
             });
         }
 
-        if (laborCosts.design > 0) {
+        if (estimate.designCost > 0) {
             items.push({
                 id: 'labor-design',
                 type: 'labor',
                 name: 'Design Customization',
                 quantity: 1,
-                unitPrice: laborConfig.designCustomizationFee,
-                description: `Custom design and consultation`,
-                lineTotal: laborCosts.design,
+                unitPrice: estimate.designCost,
+                description: `${design} option`,
+                lineTotal: estimate.designCost,
             });
         }
 
-        if (laborCosts.measurement > 0) {
+        if (estimate.addOnCost > 0) {
+            items.push({
+                id: 'selected-add-ons',
+                type: 'accessory',
+                name: 'Selected Add-ons',
+                quantity: 1,
+                unitPrice: estimate.addOnCost,
+                description: selectedAddOns.join(', '),
+                lineTotal: estimate.addOnCost,
+            });
+        }
+
+        if (estimate.measurementCost > 0) {
             items.push({
                 id: 'labor-measurement',
                 type: 'labor',
                 name: 'Measurement & Site Visit',
                 quantity: 1,
-                unitPrice: laborConfig.measurementFee,
-                description: `On-site measurement and assessment`,
-                lineTotal: laborCosts.measurement,
+                unitPrice: estimate.measurementCost,
+                description: 'On-site measurement and assessment',
+                lineTotal: estimate.measurementCost,
             });
         }
 
@@ -254,11 +243,12 @@ const POSQuotationTab = () => {
         height,
         unit,
         design,
-        glassType,
+        glassThickness,
+        glassColor,
         aluminumProfile,
         panelCount,
-        installationRequired,
-        customDesignRequired,
+        serviceMode,
+        selectedAddOns,
         measurementRequired,
         discountType,
         discountValue,
@@ -297,7 +287,7 @@ const POSQuotationTab = () => {
             // Store the raw line amount. Discount and tax apply once to the cart.
             price: quotationSummary.subtotal,
             qty: 1,
-            description: `${glassType}, ${width}×${height}${unit}, ${design}`,
+            description: `${glassThickness} ${glassColor}, ${width}×${height}${unit}, ${design}, ${serviceMode}`,
             lineItems: quotationSummary.lineItems,
         };
         
@@ -449,10 +439,22 @@ const POSQuotationTab = () => {
     );
 
     const option = (value: string, active: boolean, onPress: () => void) => (
-        <TouchableOpacity key={value} style={[styles.choice, active && styles.choiceActive]} onPress={onPress}>
-            <TextComponent style={[styles.choiceText, active && styles.choiceTextActive]}>{value}</TextComponent>
+        <TouchableOpacity
+            key={value}
+            style={[styles.optionButton, active && styles.optionButtonActive]}
+            onPress={onPress}
+        >
+            <TextComponent style={[styles.optionText, active && styles.optionTextActive]}>
+                {value}
+            </TextComponent>
         </TouchableOpacity>
     );
+
+    const toggleAddOn = (addOn: string) => {
+        setSelectedAddOns(current => current.includes(addOn)
+            ? current.filter(item => item !== addOn)
+            : [...current, addOn]);
+    };
 
     if (loading) {
         return (
@@ -496,14 +498,21 @@ const POSQuotationTab = () => {
                 <TextComponent style={styles.sectionTitle}>🎨 Frame & Glass Specifications</TextComponent>
                 
                 <TextComponent style={styles.sectionLabel}>
-                    Glass Type <TextComponent style={styles.required}>*</TextComponent>
+                    Glass Thickness <TextComponent style={styles.required}>*</TextComponent>
                 </TextComponent>
                 <View style={styles.picker}>
-                    <Picker selectedValue={glassType} onValueChange={setGlassType}>
-                        {choices.glassType.map(type => (
+                    <Picker selectedValue={glassThickness} onValueChange={setGlassThickness}>
+                        {choices.thickness.map(type => (
                             <Picker.Item key={type} label={type} value={type} />
                         ))}
                     </Picker>
+                </View>
+
+                <TextComponent style={styles.sectionLabel}>
+                    Glass Type / Color <TextComponent style={styles.required}>*</TextComponent>
+                </TextComponent>
+                <View style={styles.optionsGrid}>
+                    {choices.glassColor.map(value => option(value, glassColor === value, () => setGlassColor(value)))}
                 </View>
 
                 <TextComponent style={styles.sectionLabel}>
@@ -621,27 +630,19 @@ const POSQuotationTab = () => {
                     ))}
                 </View>
 
-                <TextComponent style={styles.sectionLabel}>Labor & Services</TextComponent>
-                <View style={styles.switchRow}>
-                    <TextComponent style={styles.switchLabel}>Installation Required</TextComponent>
-                    <Switch
-                        value={installationRequired}
-                        onValueChange={setInstallationRequired}
-                        trackColor={{false: '#ccc', true: '#81c784'}}
-                        thumbColor={installationRequired ? '#4caf50' : '#f1f1f1'}
-                    />
+                <TextComponent style={styles.sectionLabel}>Supply or Service</TextComponent>
+                <View style={styles.optionsGrid}>
+                    {(['Supply Only', 'Delivery & Installation'] as const).map(value =>
+                        option(value, serviceMode === value, () => setServiceMode(value)),
+                    )}
                 </View>
 
-                <View style={styles.switchRow}>
-                    <TextComponent style={styles.switchLabel}>Custom Design Fee</TextComponent>
-                    <Switch
-                        value={customDesignRequired}
-                        onValueChange={setCustomDesignRequired}
-                        trackColor={{false: '#ccc', true: '#81c784'}}
-                        thumbColor={customDesignRequired ? '#4caf50' : '#f1f1f1'}
-                    />
+                <TextComponent style={styles.sectionLabel}>Optional Add-ons</TextComponent>
+                <View style={styles.optionsGrid}>
+                    {choices.addOns.map(value => option(value, selectedAddOns.includes(value), () => toggleAddOn(value)))}
                 </View>
 
+                <TextComponent style={styles.sectionLabel}>Additional Services</TextComponent>
                 <View style={styles.switchRow}>
                     <TextComponent style={styles.switchLabel}>Measurement Service</TextComponent>
                     <Switch
