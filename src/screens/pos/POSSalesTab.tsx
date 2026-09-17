@@ -15,7 +15,12 @@ import dayjs from 'dayjs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import {TextComponent} from '../../components';
-import {fetchPosSales, fetchPosSaleDetails} from '../../utils/posService';
+import {
+    addCollectedSale,
+    fetchPosSales,
+    fetchPosSaleDetails,
+    getCollectedSaleIds,
+} from '../../utils/posService';
 import {PRIMARY_COLOR} from '../../utils/constant';
 
 const money = n =>
@@ -37,6 +42,7 @@ const POSSalesTab = () => {
     const [detailOpen, setDetailOpen] = useState(false);
     const [detailLoading, setDetailLoading] = useState(false);
     const [detail, setDetail] = useState(null);
+    const [collectedIds, setCollectedIds] = useState([]);
 
     const load = useCallback(
         async (f = from, t = to) => {
@@ -47,6 +53,7 @@ const POSSalesTab = () => {
                 const toStr = t ? dayjs(t).format('YYYY-MM-DD') : '';
                 const data = await fetchPosSales(bId, fromStr, toStr);
                 setSales(data);
+                setCollectedIds(await getCollectedSaleIds(bId));
             } catch {
                 // ignore
             }
@@ -90,10 +97,22 @@ const POSSalesTab = () => {
         setDetailLoading(false);
     };
 
+    const collectSale = async sale => {
+        try {
+            const branchId = Number(await AsyncStorage.getItem('branch_id')) || 0;
+            await addCollectedSale(branchId, Number(sale.id));
+            setCollectedIds(current => [...new Set([...current, Number(sale.id)])]);
+        } catch {
+            // Keep the sales list usable if local collection storage fails.
+        }
+    };
+
     let total = 0;
     sales.forEach(s => (total += Number(s.total || 0)));
 
-    const renderItem = ({item}) => (
+    const renderItem = ({item}) => {
+        const collected = collectedIds.includes(Number(item.id));
+        return (
         <TouchableOpacity
             style={styles.row}
             onPress={() => openDetail(item)}
@@ -113,11 +132,28 @@ const POSSalesTab = () => {
                     {dayjs(item.created_at).format('MMM D, YYYY h:mm A')}
                 </TextComponent>
             </View>
-            <TextComponent style={styles.total}>
-                {money(item.total)}
-            </TextComponent>
+            <View style={styles.rowActions}>
+                <TextComponent style={styles.total}>{money(item.total)}</TextComponent>
+                <TouchableOpacity
+                    style={[styles.collectButton, collected && styles.collectedButton]}
+                    onPress={event => {
+                        event.stopPropagation();
+                        collectSale(item);
+                    }}
+                    disabled={collected}>
+                    <MaterialCommunityIcons
+                        name={collected ? 'check' : 'cash-plus'}
+                        size={14}
+                        color="#fff"
+                    />
+                    <TextComponent style={styles.collectButtonText}>
+                        {collected ? 'Collected' : 'Add to Collections'}
+                    </TextComponent>
+                </TouchableOpacity>
+            </View>
         </TouchableOpacity>
-    );
+        );
+    };
 
     if (loading) {
         return (
@@ -377,6 +413,18 @@ const styles = StyleSheet.create({
     invoice: {fontSize: 14, fontWeight: '700', color: '#0f172a'},
     date: {fontSize: 12, color: '#64748b', marginTop: 2},
     total: {fontSize: 14, fontWeight: '800', color: '#0f766e'},
+    rowActions: {alignItems: 'flex-end', marginLeft: 8, gap: 6},
+    collectButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: '#0f766e',
+        borderRadius: 12,
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+    },
+    collectedButton: {backgroundColor: '#94a3b8'},
+    collectButtonText: {fontSize: 9, fontWeight: '800', color: '#fff'},
     modalBg: {
         flex: 1,
         backgroundColor: 'rgba(15,23,42,0.45)',

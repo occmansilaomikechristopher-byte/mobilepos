@@ -3,6 +3,7 @@ export const CASHIER_TABS = [
     {label: 'Products', icon: 'cube-outline'},
     {label: 'Inventory', icon: 'warehouse'},
     {label: 'Sales', icon: 'clipboard-text-outline'},
+    {label: 'Collections', icon: 'cash-multiple'},
     {label: 'Quotations', icon: 'file-document-outline'},
     {label: 'Logs', icon: 'fingerprint'},
     {label: 'Damage', icon: 'alert-outline'},
@@ -12,6 +13,7 @@ export const CASHIER_TABS = [
 
 const REQUEST_TAB = {label: 'Request', icon: 'clipboard-outline'};
 const DAMAGE_TAB = {label: 'Damage', icon: 'alert-outline'};
+const COLLECTIONS_TAB = {label: 'Collections', icon: 'cash-multiple'};
 
 export const NON_CASHIER_TABS = [
     {label: 'POS', icon: 'point-of-sale'},
@@ -23,6 +25,7 @@ export const NON_CASHIER_TABS = [
 
 export const SECRETARY_TABS = [
     ...NON_CASHIER_TABS.slice(0, -1),
+    COLLECTIONS_TAB,
     {label: 'Quotations', icon: 'file-document-outline'},
     DAMAGE_TAB,
     REQUEST_TAB,

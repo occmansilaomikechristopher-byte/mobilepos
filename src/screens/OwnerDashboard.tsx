@@ -46,6 +46,8 @@ const OwnerDashboard = ({navigation}) => {
             let totalPayable = 0;
             let quotationCount = 0;
             let quotationTotal = 0;
+            let approvedCollections = 0;
+            let pendingCollections = 0;
 
             try {
                 // Fetch sales data
@@ -58,6 +60,17 @@ const OwnerDashboard = ({navigation}) => {
                 }
             } catch (e) {
                 console.error('Error fetching sales:', e);
+            }
+
+            try {
+                const collectionsRes = await axiosConfig.get('?action=owner-report-collections');
+                const collectionsData = collectionsRes.data;
+                if (collectionsData.success) {
+                    approvedCollections = collectionsData.approved || 0;
+                    pendingCollections = collectionsData.pending || 0;
+                }
+            } catch (e) {
+                console.error('Error fetching collections:', e);
             }
 
             try {
@@ -138,6 +151,14 @@ const OwnerDashboard = ({navigation}) => {
                     })}`,
                     description: 'Total Sales All Branches',
                     color: '#10b981',
+                },
+                {
+                    id: 'collections',
+                    title: 'Collections Report',
+                    icon: 'cash-multiple',
+                    value: `₱${approvedCollections.toLocaleString('en-PH', {maximumFractionDigits: 0})}`,
+                    description: `Approved · ₱${pendingCollections.toLocaleString('en-PH', {maximumFractionDigits: 0})} pending`,
+                    color: '#0f766e',
                 },
                 {
                     id: 'inventory',

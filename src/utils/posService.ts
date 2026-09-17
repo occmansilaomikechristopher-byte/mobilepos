@@ -1,5 +1,31 @@
 import axiosConfig from './axiosConfig';
 
+const getAsyncStorage = () =>
+    require('@react-native-async-storage/async-storage').default;
+
+export const POS_COLLECTIONS_STORAGE_KEY = (branchId: number) =>
+    `pos_collected_sales_${branchId}`;
+
+export const getCollectedSaleIds = async (branchId: number): Promise<number[]> => {
+    const value = await getAsyncStorage().getItem(POS_COLLECTIONS_STORAGE_KEY(branchId));
+    try {
+        const ids = value ? JSON.parse(value) : [];
+        return Array.isArray(ids) ? ids.map(Number).filter(Number.isFinite) : [];
+    } catch {
+        return [];
+    }
+};
+
+export const addCollectedSale = async (branchId: number, saleId: number) => {
+    const ids = await getCollectedSaleIds(branchId);
+    if (!ids.includes(Number(saleId))) {
+        await getAsyncStorage().setItem(
+            POS_COLLECTIONS_STORAGE_KEY(branchId),
+            JSON.stringify([...ids, Number(saleId)]),
+        );
+    }
+};
+
 export interface PosProduct {
     id: number;
     product_code: string;
@@ -61,6 +87,7 @@ export interface PosSale {
     total: string;
     payment: string;
     change_due: string;
+    collection_status?: 'Pending' | 'Approved';
     created_at: string;
 }
 
@@ -106,6 +133,14 @@ export const savePosSale = async (payload: {
 }) => {
     const res = await axiosConfig.post('?action=mobile-pos-save-sale', payload);
     return res.data; // { result, message, invoice_no, subtotal, discount, total, change }
+};
+
+export const approvePosCollection = async (branchId: number, saleId: number) => {
+    const res = await axiosConfig.post('?action=mobile-pos-approve-collection', {
+        branch_id: branchId,
+        sale_id: saleId,
+    });
+    return res.data;
 };
 
 export interface PosQuotationItem extends CartItem {

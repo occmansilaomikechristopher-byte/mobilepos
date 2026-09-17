@@ -20,9 +20,12 @@ describe('POS dashboard tabs', () => {
     it('includes Quotations for cashiers after Sales', () => {
         const tabs = getTabConfig(true);
         const salesIndex = tabs.findIndex(tab => tab.label === 'Sales');
+        const collectionsIndex = tabs.findIndex(tab => tab.label === 'Collections');
         const quotationsIndex = tabs.findIndex(tab => tab.label === 'Quotations');
 
-        expect(quotationsIndex).toBe(salesIndex + 1);
+        expect(collectionsIndex).toBe(salesIndex + 1);
+        expect(quotationsIndex).toBe(collectionsIndex + 1);
+        expect(tabs[collectionsIndex].icon).toBe('cash-multiple');
         expect(tabs[quotationsIndex].icon).toBe('file-document-outline');
         expect(getTabConfig(false).some(tab => tab.label === 'Quotations')).toBe(
             false,
@@ -50,9 +53,12 @@ describe('POS dashboard tabs', () => {
     it('includes Quotations for ID 9 secretary users after Sales', () => {
         const tabs = getTabConfig(false, true);
         const salesIndex = tabs.findIndex(tab => tab.label === 'Sales');
+        const collectionsIndex = tabs.findIndex(tab => tab.label === 'Collections');
         const quotationsIndex = tabs.findIndex(tab => tab.label === 'Quotations');
 
-        expect(quotationsIndex).toBe(salesIndex + 1);
+        expect(collectionsIndex).toBe(salesIndex + 1);
+        expect(quotationsIndex).toBe(collectionsIndex + 1);
+        expect(tabs[collectionsIndex].icon).toBe('cash-multiple');
         expect(tabs[quotationsIndex].icon).toBe('file-document-outline');
     });
 });

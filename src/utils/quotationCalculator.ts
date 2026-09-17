@@ -298,8 +298,13 @@ export type GlassThickness = 5 | 6 | 8;
 export type GlassColor = 'Clear' | 'Dark Gray' | 'Bronze' | 'Reflective' | 'Mirror' | 'Smoke Glass';
 export type QuotationServiceMode = 'Supply Only' | 'Delivery & Installation';
 
+// Formula rate from the quotation rules. This is a material rate, not a
+// product price, so quotations can be calculated for products without a
+// fixed unit_price.
+export const DEFAULT_QUOTATION_BASE_RATE = 500;
+
 export interface QuotationEstimateOptions {
-    basePrice: number;
+    basePrice?: number;
     width: number;
     height: number;
     unit: QuotationDimensions['unit'];
@@ -329,7 +334,7 @@ export interface QuotationEstimate {
  * product, material options, dimensions, and service choices.
  */
 export const calculateQuotationEstimate = ({
-    basePrice,
+    basePrice = DEFAULT_QUOTATION_BASE_RATE,
     width,
     height,
     unit,

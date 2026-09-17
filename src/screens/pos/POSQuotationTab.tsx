@@ -68,20 +68,23 @@ const POSQuotationTab = () => {
     const [width, setWidth] = useState('48');
     const [height, setHeight] = useState('48');
     const [panelCount, setPanelCount] = useState('1');
+    const [basePrice, setBasePrice] = useState('');
     
     // Labor & Customization Options
     const [serviceMode, setServiceMode] = useState<'Supply Only' | 'Delivery & Installation'>('Supply Only');
     const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
     const [measurementRequired, setMeasurementRequired] = useState(false);
     
-    // Pricing Configuration
-    const [discountType, setDiscountType] = useState<'fixed' | 'percentage'>('percentage');
-    const [discountValue, setDiscountValue] = useState('0');
-    const [taxPercentage, setTaxPercentage] = useState('12');
+    // Quotation defaults.
+    const discountType = 'fixed';
+    const discountValue = '0';
+    const taxPercentage = '0';
     
     // UI State
     const [cart, setCart] = useState<any[]>([]);
-    const [priceOverrides, setPriceOverrides] = useState<Record<string, string>>({});
+    const [calculatedInputKey, setCalculatedInputKey] = useState<string | null>(null);
+    const [priceError, setPriceError] = useState('');
+    const [lineItemPriceOverrides, setLineItemPriceOverrides] = useState<Record<string, string>>({});
     const [lineItems, setLineItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -122,7 +125,7 @@ const POSQuotationTab = () => {
         }
 
         const estimate = calculateQuotationEstimate({
-            basePrice: Number(selectedProduct.unit_price || 0),
+            basePrice: Number(basePrice),
             width: Number(width),
             height: Number(height),
             unit: unit as any,
@@ -209,14 +212,13 @@ const POSQuotationTab = () => {
         }
 
         const pricedItems = items.map(item => {
-            const override = priceOverrides[item.id];
-            const unitPrice = override === undefined || override === ''
-                ? Number(item.unitPrice)
-                : Math.max(0, Number(override) || 0);
+            if (lineItemPriceOverrides[item.id] === undefined) return item;
+
+            const unitPrice = Math.max(0, Number(lineItemPriceOverrides[item.id]) || 0);
             return {
                 ...item,
                 unitPrice,
-                lineTotal: unitPrice * Number(item.quantity || 0),
+                lineTotal: unitPrice * item.quantity,
             };
         });
 
@@ -247,24 +249,46 @@ const POSQuotationTab = () => {
         glassColor,
         aluminumProfile,
         panelCount,
+        basePrice,
+        lineItemPriceOverrides,
         serviceMode,
         selectedAddOns,
         measurementRequired,
         discountType,
         discountValue,
         taxPercentage,
-        priceOverrides,
     ]);
 
-    const updateLinePrice = (lineId: string, value: string) => {
-        setPriceOverrides(current => ({...current, [lineId]: value}));
-    };
+    const quotationInputKey = JSON.stringify([
+        productId, width, height, unit, design, glassThickness, glassColor,
+        aluminumProfile, panelCount, basePrice, serviceMode, selectedAddOns,
+        measurementRequired, discountType, discountValue, taxPercentage,
+    ]);
+    const isCalculated = calculatedInputKey === quotationInputKey;
 
-    const normalizeLinePrice = (lineId: string) => {
-        setPriceOverrides(current => {
-            const value = Number(current[lineId]);
-            return {...current, [lineId]: Number.isFinite(value) ? value.toFixed(2) : '0.00'};
-        });
+    useEffect(() => {
+        setLineItemPriceOverrides({});
+    }, [quotationInputKey]);
+
+    const emptySummary = {
+        lineItems: [],
+        subtotal: 0,
+        discountAmount: 0,
+        taxAmount: 0,
+        total: 0,
+    };
+    const displayedSummary = isCalculated ? quotationSummary : emptySummary;
+
+    const calculateQuotation = () => {
+        if (!selectedProduct || Number(width) <= 0 || Number(height) <= 0 || Number(panelCount) <= 0) {
+            return Alert.alert('Quotation', 'Please select a product and enter valid dimensions.');
+        }
+        if (Number(basePrice) <= 0) {
+            setPriceError('Please enter a valid price before calculating.');
+            return;
+        }
+        setPriceError('');
+        setCalculatedInputKey(quotationInputKey);
     };
 
     const money = (value: number) => formatCurrency(value);
@@ -277,8 +301,8 @@ const POSQuotationTab = () => {
     ), [cart, discountType, discountValue, taxPercentage]);
 
     const addToQuotation = () => {
-        if (!selectedProduct || quotationSummary.total <= 0) {
-            return Alert.alert('Quotation', 'Please select a product and enter valid dimensions.');
+        if (!isCalculated || !selectedProduct || quotationSummary.total <= 0) {
+            return Alert.alert('Quotation', 'Please click Calculate before adding this quotation.');
         }
         
         const quotationItem = {
@@ -364,12 +388,13 @@ const POSQuotationTab = () => {
                 <View style={styles.editablePriceBox}>
                     <TextComponent style={styles.priceCurrency}>₱</TextComponent>
                     <TextInput
-                        value={priceOverrides[item.id] ?? Number(item.unitPrice).toFixed(2)}
-                        onChangeText={value => updateLinePrice(item.id, value)}
-                        onBlur={() => normalizeLinePrice(item.id)}
+                        value={lineItemPriceOverrides[item.id] ?? Number(item.unitPrice).toFixed(2)}
+                        onChangeText={value => setLineItemPriceOverrides(current => ({
+                            ...current,
+                            [item.id]: value,
+                        }))}
                         keyboardType="decimal-pad"
                         style={styles.linePriceInput}
-                        selectTextOnFocus
                     />
                     <TextComponent style={styles.lineItemUnit}> each</TextComponent>
                 </View>
@@ -654,59 +679,12 @@ const POSQuotationTab = () => {
                 </View>
             </View>
 
-            {/* Pricing Configuration */}
-            <View style={styles.card}>
-                <TextComponent style={styles.sectionTitle}>💰 Pricing Configuration</TextComponent>
-
-                <TextComponent style={styles.label}>Discount Type</TextComponent>
-                <View style={styles.discountTypeRow}>
-                    <TouchableOpacity
-                        style={[
-                            styles.discountTypeButton,
-                            discountType === 'fixed' && styles.discountTypeButtonActive,
-                        ]}
-                        onPress={() => setDiscountType('fixed')}
-                    >
-                        <TextComponent style={styles.discountTypeText}>Fixed (₱)</TextComponent>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[
-                            styles.discountTypeButton,
-                            discountType === 'percentage' && styles.discountTypeButtonActive,
-                        ]}
-                        onPress={() => setDiscountType('percentage')}
-                    >
-                        <TextComponent style={styles.discountTypeText}>Percentage (%)</TextComponent>
-                    </TouchableOpacity>
-                </View>
-
-                <TextComponent style={styles.label}>
-                    Discount Value ({discountType === 'fixed' ? '₱' : '%'})
-                </TextComponent>
-                <TextInput
-                    value={discountValue}
-                    onChangeText={setDiscountValue}
-                    keyboardType="decimal-pad"
-                    style={styles.input}
-                    placeholder="0"
-                />
-
-                <TextComponent style={styles.label}>Tax Percentage (%)</TextComponent>
-                <TextInput
-                    value={taxPercentage}
-                    onChangeText={setTaxPercentage}
-                    keyboardType="decimal-pad"
-                    style={styles.input}
-                    placeholder="12"
-                />
-            </View>
-
             {/* Line Items Breakdown */}
             <View style={styles.card}>
                 <TextComponent style={styles.sectionTitle}>📋 Cost Breakdown</TextComponent>
-                {quotationSummary.lineItems.length > 0 ? (
+                {displayedSummary.lineItems.length > 0 ? (
                     <View>
-                        {quotationSummary.lineItems.map((item, idx) => (
+                        {displayedSummary.lineItems.map((item, idx) => (
                             <View key={`lineitem-${idx}`}>
                                 {renderLineItem(item)}
                             </View>
@@ -714,9 +692,34 @@ const POSQuotationTab = () => {
                     </View>
                 ) : (
                     <TextComponent style={styles.emptyMessage}>
-                        Enter dimensions to see cost breakdown
+                        Enter specifications, then tap Calculate to see the cost breakdown
                     </TextComponent>
                 )}
+            </View>
+
+            {/* Pricing */}
+            <View style={styles.card}>
+                <TextComponent style={styles.sectionTitle}>💰 Pricing</TextComponent>
+                <TextComponent style={styles.label}>
+                    Base Price <TextComponent style={styles.required}>*</TextComponent>
+                </TextComponent>
+                <TextInput
+                    value={basePrice}
+                    onChangeText={value => {
+                        setBasePrice(value);
+                        if (Number(value) > 0) setPriceError('');
+                    }}
+                    keyboardType="decimal-pad"
+                    style={styles.input}
+                    placeholder="Enter price"
+                    placeholderTextColor="#94a3b8"
+                />
+                {!!priceError && (
+                    <TextComponent style={styles.inputError}>{priceError}</TextComponent>
+                )}
+                <TextComponent style={styles.priceHint}>
+                    Enter the price first before tapping Calculate.
+                </TextComponent>
             </View>
 
             {/* Quotation Summary */}
@@ -725,35 +728,32 @@ const POSQuotationTab = () => {
                 <View style={styles.summaryRow}>
                     <TextComponent style={styles.summaryLabel}>Subtotal:</TextComponent>
                     <TextComponent style={styles.summaryValue}>
-                        {money(quotationSummary.subtotal)}
-                    </TextComponent>
-                </View>
-                <View style={styles.summaryRow}>
-                    <TextComponent style={styles.summaryLabel}>Discount:</TextComponent>
-                    <TextComponent style={styles.summaryValue}>
-                        −{money(quotationSummary.discountAmount)}
-                    </TextComponent>
-                </View>
-                <View style={styles.summaryRow}>
-                    <TextComponent style={styles.summaryLabel}>Tax ({taxPercentage}%):</TextComponent>
-                    <TextComponent style={styles.summaryValue}>
-                        +{money(quotationSummary.taxAmount)}
+                        {money(displayedSummary.subtotal)}
                     </TextComponent>
                 </View>
                 <View style={[styles.summaryRow, styles.totalSummaryRow]}>
                     <TextComponent style={styles.totalSummaryLabel}>Total:</TextComponent>
                     <TextComponent style={styles.totalSummaryValue}>
-                        {money(quotationSummary.total)}
+                        {money(displayedSummary.total)}
                     </TextComponent>
                 </View>
 
                 <TouchableOpacity
+                    style={[styles.calculateButton, (!selectedProduct || Number(width) <= 0 || Number(height) <= 0) && styles.buttonDisabled]}
+                    onPress={calculateQuotation}
+                    disabled={!selectedProduct || Number(width) <= 0 || Number(height) <= 0}
+                >
+                    <MaterialCommunityIcons name="calculator" size={20} color="#fff" />
+                    <TextComponent style={styles.buttonText}>Calculate</TextComponent>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                     style={[
                         styles.addToCartButton,
-                        (!selectedProduct || quotationSummary.total <= 0) && styles.buttonDisabled,
+                        (!isCalculated || displayedSummary.total <= 0) && styles.buttonDisabled,
                     ]}
                     onPress={addToQuotation}
-                    disabled={!selectedProduct || quotationSummary.total <= 0}
+                    disabled={!isCalculated || displayedSummary.total <= 0}
                 >
                     <MaterialCommunityIcons name="cart-plus" size={20} color="#fff" />
                     <TextComponent style={styles.buttonText}>Add to Quotation</TextComponent>
@@ -793,7 +793,7 @@ const POSQuotationTab = () => {
                     >
                         <MaterialCommunityIcons name="content-save" size={20} color="#fff" />
                         <TextComponent style={styles.buttonText}>
-                            {saving ? 'Saving...' : 'Save Quotation'}
+                            {saving ? 'Saving...' : 'Save / Submit Quotation'}
                         </TextComponent>
                     </TouchableOpacity>
                 </View>
@@ -909,6 +909,16 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
         textAlign: 'center',
         paddingVertical: 16,
+    },
+    priceHint: {
+        fontSize: 12,
+        color: '#64748b',
+        marginTop: 2,
+    },
+    inputError: {
+        fontSize: 12,
+        color: '#dc2626',
+        marginBottom: 4,
     },
 
     // Inputs
@@ -1126,6 +1136,9 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         textAlign: 'right',
     },
+    readOnlyLinePrice: {
+        opacity: 0.8,
+    },
 
     // Summary
     summaryRow: {
@@ -1276,6 +1289,17 @@ const styles = StyleSheet.create({
 
     // Buttons
     addToCartButton: {
+        backgroundColor: '#075da5',
+        borderRadius: 8,
+        paddingVertical: 13,
+        paddingHorizontal: 16,
+        flexDirection: 'row',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 14,
+    },
+    calculateButton: {
         backgroundColor: '#075da5',
         borderRadius: 8,
         paddingVertical: 13,

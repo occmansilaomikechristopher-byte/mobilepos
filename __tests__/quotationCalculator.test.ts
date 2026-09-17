@@ -70,4 +70,20 @@ describe('quotation calculator', () => {
         expect(delivered.designCost).toBe(3000);
         expect(delivered.addOnCost).toBe(1300);
     });
+
+    it('uses the formula rate when no product price is supplied', () => {
+        const estimate = calculateQuotationEstimate({
+            width: 100,
+            height: 100,
+            unit: 'CM',
+            panelCount: 1,
+            thickness: 6,
+            glassColor: 'Clear',
+            serviceMode: 'Supply Only',
+        });
+
+        expect(estimate.glassCost).toBe(500);
+        expect(estimate.aluminumCost).toBe(1000);
+        expect(estimate.subtotal).toBe(1500);
+    });
 });

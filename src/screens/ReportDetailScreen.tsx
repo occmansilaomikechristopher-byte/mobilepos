@@ -20,6 +20,8 @@ const ReportDetailScreen = ({navigation, route}) => {
     useEffect(() => {
         if (reportId === 'sales') {
             loadReportBranches('sales');
+        } else if (reportId === 'collections') {
+            loadReportBranches('collections');
         } else if (reportId === 'inventory') {
             loadReportBranches('inventory');
         } else if (reportId === 'attendance') {
@@ -42,6 +44,8 @@ const ReportDetailScreen = ({navigation, route}) => {
         let isAggregateOnly = false;
         if (reportType === 'sales') {
             action = 'owner-report-sales-branches';
+        } else if (reportType === 'collections') {
+            action = 'owner-report-collections-branches';
         } else if (reportType === 'inventory') {
             action = 'owner-report-inventory-branches';
         } else if (reportType === 'attendance') {
@@ -93,6 +97,9 @@ const ReportDetailScreen = ({navigation, route}) => {
         if (reportId === 'sales') {
             return 'Sales totals broken down by branch.';
         }
+        if (reportId === 'collections') {
+            return 'Approved and pending collections broken down by branch.';
+        }
         if (reportId === 'inventory') {
             return 'Product count broken down by branch.';
         }
@@ -114,6 +121,15 @@ const ReportDetailScreen = ({navigation, route}) => {
     const getBranchMetric = item => {
         if (reportId === 'sales') {
             return `₱${Number(item.total_sales || 0).toLocaleString('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            })}`;
+        }
+        if (reportId === 'collections') {
+            return `Approved ₱${Number(item.approved_collections || 0).toLocaleString('en-PH', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            })} · Pending ₱${Number(item.pending_collections || 0).toLocaleString('en-PH', {
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2,
             })}`;
@@ -144,6 +160,7 @@ const ReportDetailScreen = ({navigation, route}) => {
 
     const getBranchMetricLabel = () => {
         if (reportId === 'sales') return 'Total Sales';
+        if (reportId === 'collections') return 'Collections';
         if (reportId === 'inventory') return 'Products';
         if (reportId === 'attendance') return 'Attendance';
         if (reportId === 'payable') return 'Payables';
@@ -188,7 +205,7 @@ const ReportDetailScreen = ({navigation, route}) => {
                 <TextComponent style={styles.sectionTitle}>
                     {title}
                 </TextComponent>
-                {['sales', 'inventory', 'attendance', 'payable', 'payroll', 'quotations'].includes(reportId) ? (
+                {['sales', 'collections', 'inventory', 'attendance', 'payable', 'payroll', 'quotations'].includes(reportId) ? (
                     <>
                         <TextComponent style={styles.sectionSubtitle}>
                             {getReportSubtitle()}
