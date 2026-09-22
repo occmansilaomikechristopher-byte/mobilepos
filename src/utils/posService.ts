@@ -30,10 +30,17 @@ export interface PosProduct {
     id: number;
     product_code: string;
     product_name: string;
+    category_id: number | null;
+    category_name?: string | null;
     unit_price: string;
     quantity_on_hand: string;
     unit: string | null;
     image: string | null;
+}
+
+export interface PosProductCategory {
+    id: number;
+    category_name: string;
 }
 
 export interface CartItem {
@@ -50,6 +57,13 @@ export const fetchPosProducts = async (
         branch_id: branchId,
     });
     return res.data?.products || [];
+};
+
+export const fetchPosProductCategories = async (): Promise<PosProductCategory[]> => {
+    const res = await axiosConfig.get('?action=mobile-pos-product-categories');
+    if (Array.isArray(res.data?.categories)) return res.data.categories;
+    if (Array.isArray(res.data?.data)) return res.data.data;
+    return Array.isArray(res.data) ? res.data : [];
 };
 
 export const updatePosProductStock = async (

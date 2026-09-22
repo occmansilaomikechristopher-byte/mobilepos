@@ -4,6 +4,7 @@ import {
     calculateTax,
     calculateTotal,
     convertToSquareMeters,
+    convertToSquareFeet,
     calculatePerimeter,
     calculateQuotationEstimate,
 } from '../src/utils/quotationCalculator';
@@ -12,6 +13,10 @@ describe('quotation calculator', () => {
     it('converts dimensions to square meters and perimeter', () => {
         expect(convertToSquareMeters(100, 100, 'CM')).toBe(1);
         expect(calculatePerimeter(100, 100, 'CM')).toBe(4);
+    });
+
+    it('converts glass dimensions to square feet using square inches divided by 144', () => {
+        expect(convertToSquareFeet(48, 48, 'IN')).toBe(16);
     });
 
     it('caps fixed and percentage discounts', () => {
@@ -64,15 +69,17 @@ describe('quotation calculator', () => {
             serviceMode: 'Delivery & Installation',
         });
 
-        expect(supplyOnly.subtotal).toBe(3000);
+        expect(supplyOnly.glassCost).toBeCloseTo(10763.910000000002);
+        expect(supplyOnly.subtotal).toBeCloseTo(12763.910000000002);
         expect(delivered.subtotal).toBeGreaterThan(supplyOnly.subtotal);
         expect(delivered.serviceCost).toBe(1750);
         expect(delivered.designCost).toBe(3000);
         expect(delivered.addOnCost).toBe(1300);
     });
 
-    it('uses the formula rate when no product price is supplied', () => {
+    it('uses the supplied configured price per square foot', () => {
         const estimate = calculateQuotationEstimate({
+            basePrice: 300,
             width: 100,
             height: 100,
             unit: 'CM',
@@ -82,8 +89,24 @@ describe('quotation calculator', () => {
             serviceMode: 'Supply Only',
         });
 
-        expect(estimate.glassCost).toBe(500);
-        expect(estimate.aluminumCost).toBe(1000);
-        expect(estimate.subtotal).toBe(1500);
+        expect(estimate.glassCost).toBeCloseTo(3229.173125);
+        expect(estimate.aluminumCost).toBe(600);
+        expect(estimate.subtotal).toBeCloseTo(3829.173125);
+    });
+
+    it('prices a 48 by 48 inch clear 6mm panel at 300 pesos per square foot', () => {
+        const estimate = calculateQuotationEstimate({
+            basePrice: 300,
+            width: 48,
+            height: 48,
+            unit: 'IN',
+            panelCount: 1,
+            thickness: 6,
+            glassColor: 'Clear',
+            serviceMode: 'Supply Only',
+        });
+
+        expect(estimate.squareFeet).toBe(16);
+        expect(estimate.glassCost).toBe(4800);
     });
 });

@@ -28,6 +28,27 @@ export const convertToSquareMeters = (
 };
 
 /**
+ * Convert dimensions to square feet for glass pricing.
+ * Dimensions are first converted to inches, then divided by 144 square inches
+ * per square foot (for example, 48 × 48 inches = 16 square feet).
+ */
+export const convertToSquareFeet = (
+    width: number,
+    height: number,
+    unit: 'MM' | 'CM' | 'IN' | 'Ft' | 'M',
+): number => {
+    const conversionToInches: Record<string, number> = {
+        MM: 1 / 25.4,
+        CM: 1 / 2.54,
+        IN: 1,
+        Ft: 12,
+        M: 39.37007874015748,
+    };
+    const inchesPerUnit = conversionToInches[unit];
+    return (width * inchesPerUnit * height * inchesPerUnit) / 144;
+};
+
+/**
  * Convert dimensions to meters (for linear measurements)
  */
 export const convertToMeters = (
@@ -49,7 +70,7 @@ export const convertToMeters = (
  */
 export const calculateGlassCost = (
     glassPanel: GlassPanel,
-    squareMeters: number,
+    squareFeet: number,
 ): number => {
     const typePremium: Record<string, number> = {
         Clear: 1.0,
@@ -59,7 +80,7 @@ export const calculateGlassCost = (
         Tempered: 1.4,
     };
     const premium = typePremium[glassPanel.type] || 1.0;
-    return glassPanel.pricePerUnit * squareMeters * premium;
+    return glassPanel.pricePerUnit * squareFeet * premium;
 };
 
 /**
@@ -148,18 +169,18 @@ export const generateLineItems = (
     installationRequired: boolean,
 ): QuotationLineItem[] => {
     const items: QuotationLineItem[] = [];
-    const squareMeters = convertToSquareMeters(dimensions.width, dimensions.height, dimensions.unit);
+    const squareFeet = convertToSquareFeet(dimensions.width, dimensions.height, dimensions.unit);
     const perimeterMeters = calculatePerimeter(dimensions.width, dimensions.height, dimensions.unit);
 
     // Glass item
-    const glassCost = calculateGlassCost(glassPanel, squareMeters);
+    const glassCost = calculateGlassCost(glassPanel, squareFeet);
     items.push({
         id: `glass-${glassPanel.id}`,
         type: 'glass',
         name: `${glassPanel.type} Glass Panel (${glassPanel.thickness}mm)`,
         quantity: panelCount,
         unitPrice: glassCost / panelCount,
-        description: `${dimensions.width} × ${dimensions.height} ${dimensions.unit}, ${squareMeters.toFixed(2)}m²`,
+        description: `${dimensions.width} × ${dimensions.height} ${dimensions.unit}, ${squareFeet.toFixed(2)}ft²`,
         lineTotal: glassCost,
     });
 
@@ -298,13 +319,9 @@ export type GlassThickness = 5 | 6 | 8;
 export type GlassColor = 'Clear' | 'Dark Gray' | 'Bronze' | 'Reflective' | 'Mirror' | 'Smoke Glass';
 export type QuotationServiceMode = 'Supply Only' | 'Delivery & Installation';
 
-// Formula rate from the quotation rules. This is a material rate, not a
-// product price, so quotations can be calculated for products without a
-// fixed unit_price.
-export const DEFAULT_QUOTATION_BASE_RATE = 500;
-
 export interface QuotationEstimateOptions {
-    basePrice?: number;
+    /** Current configured glass price per square foot. */
+    basePrice: number;
     width: number;
     height: number;
     unit: QuotationDimensions['unit'];
@@ -325,7 +342,7 @@ export interface QuotationEstimate {
     serviceCost: number;
     measurementCost: number;
     subtotal: number;
-    squareMeters: number;
+    squareFeet: number;
     perimeterMeters: number;
 }
 
@@ -334,7 +351,7 @@ export interface QuotationEstimate {
  * product, material options, dimensions, and service choices.
  */
 export const calculateQuotationEstimate = ({
-    basePrice = DEFAULT_QUOTATION_BASE_RATE,
+    basePrice,
     width,
     height,
     unit,
@@ -347,7 +364,7 @@ export const calculateQuotationEstimate = ({
     measurementRequired = false,
 }: QuotationEstimateOptions): QuotationEstimate => {
     const safePanels = Math.max(1, Number(panelCount) || 1);
-    const squareMeters = convertToSquareMeters(width, height, unit);
+    const squareFeet = convertToSquareFeet(width, height, unit);
     const perimeterMeters = calculatePerimeter(width, height, unit);
     const thicknessMultiplier: Record<GlassThickness, number> = {5: 0.9, 6: 1, 8: 1.25};
     const colorMultiplier: Record<GlassColor, number> = {
@@ -371,7 +388,7 @@ export const calculateQuotationEstimate = ({
     };
 
     const safeBasePrice = Math.max(0, Number(basePrice) || 0);
-    const glassCost = safeBasePrice * squareMeters * thicknessMultiplier[thickness] * colorMultiplier[glassColor] * safePanels;
+    const glassCost = safeBasePrice * squareFeet * thicknessMultiplier[thickness] * colorMultiplier[glassColor] * safePanels;
     const aluminumCost = safeBasePrice * 0.5 * perimeterMeters * safePanels;
     const designCost = (designPrices[design] || 0) * safePanels;
     const addOnCost = addOns.reduce((sum, addOn) => sum + (addOnPrices[addOn] || 0) * safePanels, 0);
@@ -388,7 +405,7 @@ export const calculateQuotationEstimate = ({
         serviceCost,
         measurementCost,
         subtotal: glassCost + aluminumCost + designCost + addOnCost + serviceCost + measurementCost,
-        squareMeters,
+        squareFeet,
         perimeterMeters,
     };
 };

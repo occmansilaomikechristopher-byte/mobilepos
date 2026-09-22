@@ -1,5 +1,6 @@
 import axiosConfig from '../src/utils/axiosConfig';
 import {
+    fetchPosProductCategories,
     savePosDamageItem,
     updatePosOwnerRequisitionPayment,
 } from '../src/utils/posService';
@@ -8,8 +9,42 @@ jest.mock('../src/utils/axiosConfig', () => ({
     __esModule: true,
     default: {
         post: jest.fn(),
+        get: jest.fn(),
     },
 }));
+
+describe('POS product category service', () => {
+    it('fetches categories from the existing backend category data', async () => {
+        (axiosConfig.get as jest.Mock).mockResolvedValueOnce({
+            data: {categories: [{id: 10, category_name: 'Glass'}]},
+        });
+
+        await expect(fetchPosProductCategories()).resolves.toEqual([
+            {id: 10, category_name: 'Glass'},
+        ]);
+        expect(axiosConfig.get).toHaveBeenCalledWith(
+            '?action=mobile-pos-product-categories',
+        );
+    });
+
+    it('supports the alternate data response envelope during backend rollout', async () => {
+        (axiosConfig.get as jest.Mock).mockResolvedValueOnce({
+            data: {data: [{id: 11, category_name: 'Hardware'}]},
+        });
+
+        await expect(fetchPosProductCategories()).resolves.toEqual([
+            {id: 11, category_name: 'Hardware'},
+        ]);
+    });
+
+    it('returns an empty list for malformed category responses', async () => {
+        (axiosConfig.get as jest.Mock).mockResolvedValueOnce({
+            data: {categories: {}, data: 'invalid'},
+        });
+
+        await expect(fetchPosProductCategories()).resolves.toEqual([]);
+    });
+});
 
 describe('POS damage service', () => {
     it('submits the product and quantity for server-side stock deduction', async () => {

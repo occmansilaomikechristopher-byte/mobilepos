@@ -8,7 +8,6 @@ import {
     TextInput,
     TouchableOpacity,
     View,
-    Switch,
     FlatList,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,9 +16,14 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import {TextComponent} from '../../components';
 import {
     fetchPosProducts,
+    fetchPosProductCategories,
     fetchPosQuotations,
     savePosQuotation,
 } from '../../utils/posService';
+import {
+    ALL_PRODUCTS_CATEGORY,
+    filterProductsByCategory,
+} from '../../utils/posProductGrouping';
 import {
     calculateSubtotal,
     calculateDiscount,
@@ -46,22 +50,22 @@ import {
 
 const choices = {
     unit: ['MM', 'CM', 'IN', 'Ft', 'M'],
-    design: ['None', 'French Type Design', 'Etched Design', 'Grid Design'],
     thickness: ['5mm', '6mm', '8mm'],
     glassColor: ['Clear', 'Dark Gray', 'Bronze', 'Reflective', 'Mirror', 'Smoke Glass'],
-    addOns: ['Mosquito Screen', 'Handle & Lock Set', 'Rubber Seal Upgrade'],
-    aluminumProfile: ['Standard Frame', 'Heavy Duty Frame', 'Slim Frame', 'Custom Profile'],
+    aluminumProfile: ['White', 'Black', 'Silver', 'Bronze', 'Gray', 'Dark Gray', 'Gold', 'Champagne'],
 };
 
 const POSQuotationTab = () => {
     const [products, setProducts] = useState<any[]>([]);
+    const [categories, setCategories] = useState<any[]>([]);
+    const [selectedCategoryId, setSelectedCategoryId] = useState<string>(ALL_PRODUCTS_CATEGORY);
     const [quotes, setQuotes] = useState<any[]>([]);
     const [productId, setProductId] = useState(0);
     const [branchId, setBranchId] = useState(0);
 
     // Product Specifications
     const [unit, setUnit] = useState('IN');
-    const [design, setDesign] = useState('None');
+    const design = 'None' as const;
     const [glassThickness, setGlassThickness] = useState(choices.thickness[1]);
     const [glassColor, setGlassColor] = useState(choices.glassColor[0]);
     const [aluminumProfile, setAluminumProfile] = useState(choices.aluminumProfile[0]);
@@ -71,9 +75,8 @@ const POSQuotationTab = () => {
     const [basePrice, setBasePrice] = useState('');
     
     // Labor & Customization Options
-    const [serviceMode, setServiceMode] = useState<'Supply Only' | 'Delivery & Installation'>('Supply Only');
-    const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
-    const [measurementRequired, setMeasurementRequired] = useState(false);
+    const serviceMode = 'Supply Only' as const;
+    const selectedAddOns: string[] = [];
     
     // Quotation defaults.
     const discountType = 'fixed';
@@ -95,12 +98,14 @@ const POSQuotationTab = () => {
             try {
                 const branchId = Number(await AsyncStorage.getItem('branch_id')) || 0;
                 setBranchId(branchId);
-                const [items, saved] = await Promise.all([
+                const [items, saved, productCategories] = await Promise.all([
                     fetchPosProducts(branchId),
                     fetchPosQuotations(branchId),
+                    fetchPosProductCategories(),
                 ]);
                 setProducts(items);
                 setQuotes(saved);
+                setCategories(productCategories);
                 if (items[0]) setProductId(Number(items[0].id));
             } catch (error) {
                 console.error('Quotation load error:', error);
@@ -110,6 +115,33 @@ const POSQuotationTab = () => {
         })();
     }, []);
 
+    const filteredProducts = useMemo(
+        () => filterProductsByCategory(products, selectedCategoryId),
+        [products, selectedCategoryId],
+    );
+
+    const availableCategories = useMemo(() => {
+        if (categories.length > 0) return categories;
+
+        const categoryMap = new Map<string, {id: number; category_name: string}>();
+        products.forEach(product => {
+            if (product.category_id === null || product.category_id === undefined || !product.category_name) {
+                return;
+            }
+            const id = Number(product.category_id);
+            if (Number.isFinite(id)) {
+                categoryMap.set(String(id), {id, category_name: product.category_name});
+            }
+        });
+        return Array.from(categoryMap.values());
+    }, [categories, products]);
+
+    useEffect(() => {
+        if (!filteredProducts.some(item => Number(item.id) === productId)) {
+            setProductId(filteredProducts[0] ? Number(filteredProducts[0].id) : 0);
+        }
+    }, [filteredProducts, productId]);
+
     const selectedProduct = products.find(item => Number(item.id) === productId);
     
     // Generate line items and calculate prices
@@ -117,6 +149,7 @@ const POSQuotationTab = () => {
         if (!selectedProduct || Number(width) <= 0 || Number(height) <= 0) {
             return {
                 lineItems: [],
+                areaSqFt: 0,
                 subtotal: 0,
                 discountAmount: 0,
                 taxAmount: 0,
@@ -135,7 +168,6 @@ const POSQuotationTab = () => {
             design,
             addOns: selectedAddOns,
             serviceMode,
-            measurementRequired,
         });
 
         // Generate line items
@@ -148,7 +180,7 @@ const POSQuotationTab = () => {
             name: `${glassThickness} ${glassColor} Glass Panel`,
             quantity: Number(panelCount),
             unitPrice: estimate.glassCost / Number(panelCount),
-            description: `${width} × ${height} ${unit} | ${estimate.squareMeters.toFixed(2)}m²`,
+            description: `${width} × ${height} ${unit} | ${estimate.squareFeet.toFixed(2)}ft²`,
             lineTotal: estimate.glassCost,
         });
 
@@ -159,57 +191,9 @@ const POSQuotationTab = () => {
             name: `${aluminumProfile} - Aluminum Bar`,
             quantity: 1,
             unitPrice: estimate.aluminumCost,
-            description: `Perimeter: ${estimate.perimeterMeters.toFixed(2)}m`,
+            description: `Perimeter: ${(estimate.perimeterMeters * 3.28084).toFixed(2)} ft`,
             lineTotal: estimate.aluminumCost,
         });
-
-        if (estimate.serviceCost > 0) {
-            items.push({
-                id: 'service-delivery-installation',
-                type: 'labor',
-                name: 'Delivery & Installation',
-                quantity: 1,
-                unitPrice: estimate.serviceCost,
-                description: 'Delivery and professional installation service',
-                lineTotal: estimate.serviceCost,
-            });
-        }
-
-        if (estimate.designCost > 0) {
-            items.push({
-                id: 'labor-design',
-                type: 'labor',
-                name: 'Design Customization',
-                quantity: 1,
-                unitPrice: estimate.designCost,
-                description: `${design} option`,
-                lineTotal: estimate.designCost,
-            });
-        }
-
-        if (estimate.addOnCost > 0) {
-            items.push({
-                id: 'selected-add-ons',
-                type: 'accessory',
-                name: 'Selected Add-ons',
-                quantity: 1,
-                unitPrice: estimate.addOnCost,
-                description: selectedAddOns.join(', '),
-                lineTotal: estimate.addOnCost,
-            });
-        }
-
-        if (estimate.measurementCost > 0) {
-            items.push({
-                id: 'labor-measurement',
-                type: 'labor',
-                name: 'Measurement & Site Visit',
-                quantity: 1,
-                unitPrice: estimate.measurementCost,
-                description: 'On-site measurement and assessment',
-                lineTotal: estimate.measurementCost,
-            });
-        }
 
         const pricedItems = items.map(item => {
             if (lineItemPriceOverrides[item.id] === undefined) return item;
@@ -234,6 +218,7 @@ const POSQuotationTab = () => {
 
         return {
             lineItems: pricedItems,
+            areaSqFt: estimate.squareFeet,
             subtotal,
             discountAmount,
             taxAmount,
@@ -253,7 +238,6 @@ const POSQuotationTab = () => {
         lineItemPriceOverrides,
         serviceMode,
         selectedAddOns,
-        measurementRequired,
         discountType,
         discountValue,
         taxPercentage,
@@ -262,7 +246,7 @@ const POSQuotationTab = () => {
     const quotationInputKey = JSON.stringify([
         productId, width, height, unit, design, glassThickness, glassColor,
         aluminumProfile, panelCount, basePrice, serviceMode, selectedAddOns,
-        measurementRequired, discountType, discountValue, taxPercentage,
+        discountType, discountValue, taxPercentage,
     ]);
     const isCalculated = calculatedInputKey === quotationInputKey;
 
@@ -272,6 +256,7 @@ const POSQuotationTab = () => {
 
     const emptySummary = {
         lineItems: [],
+        areaSqFt: 0,
         subtotal: 0,
         discountAmount: 0,
         taxAmount: 0,
@@ -311,7 +296,7 @@ const POSQuotationTab = () => {
             // Store the raw line amount. Discount and tax apply once to the cart.
             price: quotationSummary.subtotal,
             qty: 1,
-            description: `${glassThickness} ${glassColor}, ${width}×${height}${unit}, ${design}, ${serviceMode}`,
+            description: `${glassThickness} ${glassColor}, ${width}×${height}${unit}, ${serviceMode}`,
             lineItems: quotationSummary.lineItems,
         };
         
@@ -475,12 +460,6 @@ const POSQuotationTab = () => {
         </TouchableOpacity>
     );
 
-    const toggleAddOn = (addOn: string) => {
-        setSelectedAddOns(current => current.includes(addOn)
-            ? current.filter(item => item !== addOn)
-            : [...current, addOn]);
-    };
-
     if (loading) {
         return (
             <View style={styles.center}>
@@ -504,16 +483,34 @@ const POSQuotationTab = () => {
             {/* Product Selection */}
             <View style={styles.card}>
                 <TextComponent style={styles.sectionTitle}>🏭 Product Selection</TextComponent>
+                <TextComponent style={styles.label}>Category</TextComponent>
+                <View style={styles.picker}>
+                    <Picker
+                        selectedValue={selectedCategoryId}
+                        onValueChange={value => setSelectedCategoryId(String(value))}
+                    >
+                        <Picker.Item label="All Categories" value={ALL_PRODUCTS_CATEGORY} />
+                        {availableCategories.map(category => (
+                            <Picker.Item
+                                key={category.id}
+                                label={category.category_name}
+                                value={String(category.id)}
+                            />
+                        ))}
+                    </Picker>
+                </View>
                 <TextComponent style={styles.label}>Product</TextComponent>
                 <View style={styles.picker}>
                     <Picker selectedValue={productId} onValueChange={setProductId}>
-                        {products.map(item => (
+                        {filteredProducts.length > 0 ? filteredProducts.map(item => (
                             <Picker.Item
                                 key={item.id}
                                 label={item.product_name}
                                 value={Number(item.id)}
                             />
-                        ))}
+                        )) : (
+                            <Picker.Item label="No products in this category" value={0} />
+                        )}
                     </Picker>
                 </View>
             </View>
@@ -628,57 +625,6 @@ const POSQuotationTab = () => {
                 </View>
             </View>
 
-            {/* Design & Customization */}
-            <View style={styles.card}>
-                <TextComponent style={styles.sectionTitle}>✨ Design & Customization</TextComponent>
-                
-                <TextComponent style={styles.sectionLabel}>Design Option</TextComponent>
-                <View style={styles.optionsGrid}>
-                    {choices.design.map(value => (
-                        <TouchableOpacity
-                            key={value}
-                            style={[
-                                styles.optionButton,
-                                design === value && styles.optionButtonActive,
-                            ]}
-                            onPress={() => setDesign(value)}
-                        >
-                            <TextComponent
-                                style={[
-                                    styles.optionText,
-                                    design === value && styles.optionTextActive,
-                                ]}
-                            >
-                                {value}
-                            </TextComponent>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-
-                <TextComponent style={styles.sectionLabel}>Supply or Service</TextComponent>
-                <View style={styles.optionsGrid}>
-                    {(['Supply Only', 'Delivery & Installation'] as const).map(value =>
-                        option(value, serviceMode === value, () => setServiceMode(value)),
-                    )}
-                </View>
-
-                <TextComponent style={styles.sectionLabel}>Optional Add-ons</TextComponent>
-                <View style={styles.optionsGrid}>
-                    {choices.addOns.map(value => option(value, selectedAddOns.includes(value), () => toggleAddOn(value)))}
-                </View>
-
-                <TextComponent style={styles.sectionLabel}>Additional Services</TextComponent>
-                <View style={styles.switchRow}>
-                    <TextComponent style={styles.switchLabel}>Measurement Service</TextComponent>
-                    <Switch
-                        value={measurementRequired}
-                        onValueChange={setMeasurementRequired}
-                        trackColor={{false: '#ccc', true: '#81c784'}}
-                        thumbColor={measurementRequired ? '#4caf50' : '#f1f1f1'}
-                    />
-                </View>
-            </View>
-
             {/* Line Items Breakdown */}
             <View style={styles.card}>
                 <TextComponent style={styles.sectionTitle}>📋 Cost Breakdown</TextComponent>
@@ -701,7 +647,7 @@ const POSQuotationTab = () => {
             <View style={styles.card}>
                 <TextComponent style={styles.sectionTitle}>💰 Pricing</TextComponent>
                 <TextComponent style={styles.label}>
-                    Base Price <TextComponent style={styles.required}>*</TextComponent>
+                    Price per Square Foot <TextComponent style={styles.required}>*</TextComponent>
                 </TextComponent>
                 <TextInput
                     value={basePrice}
@@ -718,19 +664,13 @@ const POSQuotationTab = () => {
                     <TextComponent style={styles.inputError}>{priceError}</TextComponent>
                 )}
                 <TextComponent style={styles.priceHint}>
-                    Enter the price first before tapping Calculate.
+                    Enter the current price per sq. ft. before tapping Calculate.
                 </TextComponent>
             </View>
 
-            {/* Quotation Summary */}
+            {/* Quotations */}
             <View style={styles.card}>
-                <TextComponent style={styles.sectionTitle}>📊 Quotation Summary</TextComponent>
-                <View style={styles.summaryRow}>
-                    <TextComponent style={styles.summaryLabel}>Subtotal:</TextComponent>
-                    <TextComponent style={styles.summaryValue}>
-                        {money(displayedSummary.subtotal)}
-                    </TextComponent>
-                </View>
+                <TextComponent style={styles.sectionTitle}>📊 Quotations</TextComponent>
                 <View style={[styles.summaryRow, styles.totalSummaryRow]}>
                     <TextComponent style={styles.totalSummaryLabel}>Total:</TextComponent>
                     <TextComponent style={styles.totalSummaryValue}>
@@ -857,7 +797,6 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     headerCard: {
-        backgroundColor: 'linear-gradient(135deg, #0f766e 0%, #14a085 100%)',
         borderRadius: 14,
         padding: 20,
         marginBottom: 16,
