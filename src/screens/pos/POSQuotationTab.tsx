@@ -18,6 +18,7 @@ import {
     fetchPosProducts,
     fetchPosProductCategories,
     fetchPosQuotations,
+    fetchPosQuotationPricing,
     savePosQuotation,
 } from '../../utils/posService';
 import {
@@ -30,7 +31,8 @@ import {
     calculateTax,
     calculateTotal,
     calculateQuotationTotals,
-    calculateQuotationEstimate,
+    calculateCombinedQuotationPrice,
+    createQuotationPricingKey,
     formatCurrency,
 } from '../../utils/quotationCalculator';
 
@@ -50,9 +52,18 @@ import {
 
 const choices = {
     unit: ['MM', 'CM', 'IN', 'Ft', 'M'],
-    thickness: ['5mm', '6mm', '8mm'],
-    glassColor: ['Clear', 'Dark Gray', 'Bronze', 'Reflective', 'Mirror', 'Smoke Glass'],
-    aluminumProfile: ['White', 'Black', 'Silver', 'Bronze', 'Gray', 'Dark Gray', 'Gold', 'Champagne'],
+    thickness: ['5mm', '6mm'],
+    glassColor: [
+        'Clear Glass',
+        'Bronze Glass',
+        'Dark Gray Glass',
+        'Reflective Blue',
+        'Reflective Green',
+        'Reflective Bronze',
+        'Reflective Dark Gray',
+        'Reflective Gold',
+    ],
+    aluminumProfile: ['Black', 'White'],
 };
 
 const POSQuotationTab = () => {
@@ -67,16 +78,12 @@ const POSQuotationTab = () => {
     const [unit, setUnit] = useState('IN');
     const design = 'None' as const;
     const [glassThickness, setGlassThickness] = useState(choices.thickness[1]);
-    const [glassColor, setGlassColor] = useState(choices.glassColor[0]);
-    const [aluminumProfile, setAluminumProfile] = useState(choices.aluminumProfile[0]);
+    const [glassColor, setGlassColor] = useState('');
+    const [aluminumProfile, setAluminumProfile] = useState('');
     const [width, setWidth] = useState('48');
     const [height, setHeight] = useState('48');
     const [panelCount, setPanelCount] = useState('1');
-    const [basePrice, setBasePrice] = useState('');
-    
-    // Labor & Customization Options
     const serviceMode = 'Supply Only' as const;
-    const selectedAddOns: string[] = [];
     
     // Quotation defaults.
     const discountType = 'fixed';
@@ -86,9 +93,9 @@ const POSQuotationTab = () => {
     // UI State
     const [cart, setCart] = useState<any[]>([]);
     const [calculatedInputKey, setCalculatedInputKey] = useState<string | null>(null);
-    const [priceError, setPriceError] = useState('');
-    const [lineItemPriceOverrides, setLineItemPriceOverrides] = useState<Record<string, string>>({});
-    const [lineItems, setLineItems] = useState<any[]>([]);
+    const [calculatedOptionKey, setCalculatedOptionKey] = useState<string | null>(null);
+    const [pricing, setPricing] = useState<any[]>([]);
+    const [pricePerSqFtOverrides, setPricePerSqFtOverrides] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [expandedQuoteIndex, setExpandedQuoteIndex] = useState<number | null>(null);
@@ -98,14 +105,24 @@ const POSQuotationTab = () => {
             try {
                 const branchId = Number(await AsyncStorage.getItem('branch_id')) || 0;
                 setBranchId(branchId);
-                const [items, saved, productCategories] = await Promise.all([
+                const [items, saved, productCategories, quotationPricing] = await Promise.all([
                     fetchPosProducts(branchId),
                     fetchPosQuotations(branchId),
                     fetchPosProductCategories(),
+                    fetchPosQuotationPricing(),
                 ]);
                 setProducts(items);
                 setQuotes(saved);
                 setCategories(productCategories);
+                setPricing(quotationPricing.map(item => ({
+                    width: item.width,
+                    height: item.height,
+                    unit: item.unit,
+                    glassColor: item.glass_color,
+                    thickness: item.thickness,
+                    aluminumProfile: item.aluminum_profile,
+                    pricePerSqFt: item.price_per_sq_ft,
+                })));
                 if (items[0]) setProductId(Number(items[0].id));
             } catch (error) {
                 console.error('Quotation load error:', error);
@@ -136,6 +153,14 @@ const POSQuotationTab = () => {
         return Array.from(categoryMap.values());
     }, [categories, products]);
 
+    const isGlassCategorySelected = useMemo(() => {
+        if (selectedCategoryId === ALL_PRODUCTS_CATEGORY) return false;
+        const selectedCategory = availableCategories.find(
+            category => String(category.id) === selectedCategoryId,
+        );
+        return selectedCategory?.category_name?.toLowerCase().includes('glass') ?? false;
+    }, [availableCategories, selectedCategoryId]);
+
     useEffect(() => {
         if (!filteredProducts.some(item => Number(item.id) === productId)) {
             setProductId(filteredProducts[0] ? Number(filteredProducts[0].id) : 0);
@@ -144,7 +169,7 @@ const POSQuotationTab = () => {
 
     const selectedProduct = products.find(item => Number(item.id) === productId);
     
-    // Generate line items and calculate prices
+    // Generate one combined Glass + Aluminum Profile line item.
     const quotationSummary = useMemo(() => {
         if (!selectedProduct || Number(width) <= 0 || Number(height) <= 0) {
             return {
@@ -154,76 +179,83 @@ const POSQuotationTab = () => {
                 discountAmount: 0,
                 taxAmount: 0,
                 total: 0,
+                pricePerSqFt: 0,
             };
         }
-
-        const estimate = calculateQuotationEstimate({
-            basePrice: Number(basePrice),
+        try {
+            const pricingKey = createQuotationPricingKey(
+                Number(width),
+                Number(height),
+                unit as any,
+                glassColor,
+                5,
+                aluminumProfile,
+            );
+            const enteredPrice = pricePerSqFtOverrides[pricingKey];
+            const hasEnteredPrice = enteredPrice !== undefined && enteredPrice.trim() !== '';
+            const effectivePricing = hasEnteredPrice
+                ? [
+                    ...pricing,
+                    {
+                        width: Number(width),
+                        height: Number(height),
+                        unit,
+                        glassColor,
+                        thickness: 5,
+                        aluminumProfile,
+                        pricePerSqFt: Number(enteredPrice),
+                    },
+                ]
+                : pricing;
+            const estimate = calculateCombinedQuotationPrice({
             width: Number(width),
             height: Number(height),
             unit: unit as any,
             panelCount: Number(panelCount),
             thickness: Number(glassThickness.replace('mm', '')) as 5 | 6 | 8,
             glassColor: glassColor as any,
-            design,
-            addOns: selectedAddOns,
-            serviceMode,
-        });
+            aluminumProfile,
+            pricing: effectivePricing,
+            });
 
-        // Generate line items
-        const items: any[] = [];
+            const items = [{
+                id: 'combined-glass-aluminum',
+                type: 'material',
+                name: glassColor && aluminumProfile
+                    ? `${glassColor} + ${aluminumProfile} Aluminum Profile`
+                    : glassColor || (aluminumProfile ? `${aluminumProfile} Aluminum Profile` : 'Product + Glass'),
+                quantity: Number(panelCount),
+                unitPrice: estimate.materialCost / Number(panelCount),
+                description: `${glassThickness} | ${width} × ${height} ${unit} | Area: ${estimate.areaSqFt.toFixed(2)} sq. ft. | Rate: ${formatCurrency(estimate.pricePerSqFt)}/sq. ft.`,
+                lineTotal: estimate.materialCost,
+            }];
 
-        // Glass line item
-        items.push({
-            id: `glass-1`,
-            type: 'glass',
-            name: `${glassThickness} ${glassColor} Glass Panel`,
-            quantity: Number(panelCount),
-            unitPrice: estimate.glassCost / Number(panelCount),
-            description: `${width} × ${height} ${unit} | ${estimate.squareFeet.toFixed(2)}ft²`,
-            lineTotal: estimate.glassCost,
-        });
+            const subtotal = calculateSubtotal(items);
+            const discountAmount = calculateDiscount(subtotal, discountType, Number(discountValue) || 0);
+            const taxAmount = calculateTax(subtotal, Number(taxPercentage) || 0, discountAmount);
+            const total = calculateTotal(subtotal, discountAmount, taxAmount);
 
-        // Aluminum line item
-        items.push({
-            id: `aluminum-1`,
-            type: 'aluminum',
-            name: `${aluminumProfile} - Aluminum Bar`,
-            quantity: 1,
-            unitPrice: estimate.aluminumCost,
-            description: `Perimeter: ${(estimate.perimeterMeters * 3.28084).toFixed(2)} ft`,
-            lineTotal: estimate.aluminumCost,
-        });
-
-        const pricedItems = items.map(item => {
-            if (lineItemPriceOverrides[item.id] === undefined) return item;
-
-            const unitPrice = Math.max(0, Number(lineItemPriceOverrides[item.id]) || 0);
             return {
-                ...item,
-                unitPrice,
-                lineTotal: unitPrice * item.quantity,
+                lineItems: items,
+                areaSqFt: estimate.areaSqFt,
+                pricePerSqFt: estimate.pricePerSqFt,
+                subtotal,
+                discountAmount,
+                taxAmount,
+                total,
             };
-        });
-
-        // Calculate totals
-        const subtotal = calculateSubtotal(pricedItems);
-        const discountAmount = calculateDiscount(
-            subtotal,
-            discountType,
-            Number(discountValue) || 0,
-        );
-        const taxAmount = calculateTax(subtotal, Number(taxPercentage) || 0, discountAmount);
-        const total = calculateTotal(subtotal, discountAmount, taxAmount);
-
-        return {
-            lineItems: pricedItems,
-            areaSqFt: estimate.squareFeet,
-            subtotal,
-            discountAmount,
-            taxAmount,
-            total,
-        };
+        } catch (error: any) {
+            return {
+                lineItems: [],
+                areaSqFt: 0,
+                pricePerSqFt: 0,
+                subtotal: 0,
+                discountAmount: 0,
+                taxAmount: 0,
+                total: 0,
+                error: error.message || 'No configured quotation price is available.',
+            };
+        }
     }, [
         selectedProduct,
         width,
@@ -234,46 +266,46 @@ const POSQuotationTab = () => {
         glassColor,
         aluminumProfile,
         panelCount,
-        basePrice,
-        lineItemPriceOverrides,
+        pricing,
+        pricePerSqFtOverrides,
         serviceMode,
-        selectedAddOns,
         discountType,
         discountValue,
         taxPercentage,
     ]);
 
-    const quotationInputKey = JSON.stringify([
-        productId, width, height, unit, design, glassThickness, glassColor,
-        aluminumProfile, panelCount, basePrice, serviceMode, selectedAddOns,
+    const quotationOptionKey = JSON.stringify([
+        productId, unit, design, glassThickness, glassColor,
+        aluminumProfile, panelCount, serviceMode,
+        pricePerSqFtOverrides,
         discountType, discountValue, taxPercentage,
     ]);
+    const quotationInputKey = JSON.stringify([
+        quotationOptionKey, width, height,
+    ]);
     const isCalculated = calculatedInputKey === quotationInputKey;
-
-    useEffect(() => {
-        setLineItemPriceOverrides({});
-    }, [quotationInputKey]);
+    const canUpdateDimensionsAutomatically = calculatedOptionKey === quotationOptionKey;
 
     const emptySummary = {
         lineItems: [],
         areaSqFt: 0,
+        pricePerSqFt: 0,
         subtotal: 0,
         discountAmount: 0,
         taxAmount: 0,
         total: 0,
     };
-    const displayedSummary = isCalculated ? quotationSummary : emptySummary;
+    const displayedSummary = canUpdateDimensionsAutomatically ? quotationSummary : emptySummary;
 
     const calculateQuotation = () => {
         if (!selectedProduct || Number(width) <= 0 || Number(height) <= 0 || Number(panelCount) <= 0) {
             return Alert.alert('Quotation', 'Please select a product and enter valid dimensions.');
         }
-        if (Number(basePrice) <= 0) {
-            setPriceError('Please enter a valid price before calculating.');
-            return;
+        if (quotationSummary.error) {
+            return Alert.alert('Quotation', quotationSummary.error);
         }
-        setPriceError('');
         setCalculatedInputKey(quotationInputKey);
+        setCalculatedOptionKey(quotationOptionKey);
     };
 
     const money = (value: number) => formatCurrency(value);
@@ -289,6 +321,11 @@ const POSQuotationTab = () => {
         if (!isCalculated || !selectedProduct || quotationSummary.total <= 0) {
             return Alert.alert('Quotation', 'Please click Calculate before adding this quotation.');
         }
+
+        const configurationKey = quotationInputKey;
+        if (cart.some(item => item.configurationKey === configurationKey)) {
+            return Alert.alert('Quotation', 'This quotation configuration is already in the cart.');
+        }
         
         const quotationItem = {
             product_id: Number(selectedProduct.id),
@@ -296,7 +333,8 @@ const POSQuotationTab = () => {
             // Store the raw line amount. Discount and tax apply once to the cart.
             price: quotationSummary.subtotal,
             qty: 1,
-            description: `${glassThickness} ${glassColor}, ${width}×${height}${unit}, ${serviceMode}`,
+            configurationKey,
+            description: `${glassThickness}${glassColor ? `, ${glassColor}` : ''}${aluminumProfile ? `, ${aluminumProfile} Aluminum Profile` : ''}, ${width}×${height}${unit}, Area: ${quotationSummary.areaSqFt.toFixed(2)} sq. ft.`,
             lineItems: quotationSummary.lineItems,
         };
         
@@ -370,19 +408,9 @@ const POSQuotationTab = () => {
             <TextComponent style={styles.lineItemDesc}>{item.description}</TextComponent>
             <View style={styles.lineItemFooter}>
                 <TextComponent style={styles.lineItemQty}>Qty: {item.quantity}</TextComponent>
-                <View style={styles.editablePriceBox}>
-                    <TextComponent style={styles.priceCurrency}>₱</TextComponent>
-                    <TextInput
-                        value={lineItemPriceOverrides[item.id] ?? Number(item.unitPrice).toFixed(2)}
-                        onChangeText={value => setLineItemPriceOverrides(current => ({
-                            ...current,
-                            [item.id]: value,
-                        }))}
-                        keyboardType="decimal-pad"
-                        style={styles.linePriceInput}
-                    />
-                    <TextComponent style={styles.lineItemUnit}> each</TextComponent>
-                </View>
+                <TextComponent style={styles.lineItemUnit}>
+                    {money(item.unitPrice)} each
+                </TextComponent>
             </View>
         </View>
     );
@@ -460,6 +488,16 @@ const POSQuotationTab = () => {
         </TouchableOpacity>
     );
 
+    const currentPricingKey = createQuotationPricingKey(
+        Number(width),
+        Number(height),
+        unit as any,
+        glassColor,
+        5,
+        aluminumProfile,
+    );
+    const pricePerSqFtInput = pricePerSqFtOverrides[currentPricingKey] ?? '';
+
     if (loading) {
         return (
             <View style={styles.center}>
@@ -515,7 +553,8 @@ const POSQuotationTab = () => {
                 </View>
             </View>
 
-            {/* Frame & Glass Options */}
+            {/* Frame & Glass Options: only available for glass categories */}
+            {isGlassCategorySelected && (
             <View style={styles.card}>
                 <TextComponent style={styles.sectionTitle}>🎨 Frame & Glass Specifications</TextComponent>
                 
@@ -531,23 +570,26 @@ const POSQuotationTab = () => {
                 </View>
 
                 <TextComponent style={styles.sectionLabel}>
-                    Glass Type / Color <TextComponent style={styles.required}>*</TextComponent>
+                    Glass Type / Color
                 </TextComponent>
                 <View style={styles.optionsGrid}>
+                    {option('No Glass Type', !glassColor, () => setGlassColor(''))}
                     {choices.glassColor.map(value => option(value, glassColor === value, () => setGlassColor(value)))}
                 </View>
 
                 <TextComponent style={styles.sectionLabel}>
-                    Aluminum Profile <TextComponent style={styles.required}>*</TextComponent>
+                    Aluminum Profile
                 </TextComponent>
                 <View style={styles.picker}>
                     <Picker selectedValue={aluminumProfile} onValueChange={setAluminumProfile}>
+                        <Picker.Item label="Select Aluminum Profile" value="" />
                         {choices.aluminumProfile.map(profile => (
                             <Picker.Item key={profile} label={profile} value={profile} />
                         ))}
                     </Picker>
                 </View>
             </View>
+            )}
 
             {/* Dimensions */}
             <View style={styles.card}>
@@ -625,47 +667,74 @@ const POSQuotationTab = () => {
                 </View>
             </View>
 
+            <View style={styles.card}>
+                <TextComponent style={styles.sectionLabel}>
+                    Price sq. ft.
+                </TextComponent>
+                <TextInput
+                    value={pricePerSqFtInput}
+                    onChangeText={value => setPricePerSqFtOverrides(current => ({
+                        ...current,
+                        [currentPricingKey]: value,
+                    }))}
+                    keyboardType="decimal-pad"
+                    style={styles.input}
+                    placeholder="Enter price sq. ft."
+                    placeholderTextColor="#94a3b8"
+                />
+            </View>
+
             {/* Line Items Breakdown */}
             <View style={styles.card}>
                 <TextComponent style={styles.sectionTitle}>📋 Cost Breakdown</TextComponent>
                 {displayedSummary.lineItems.length > 0 ? (
                     <View>
+                        <View style={styles.summaryRow}>
+                            <TextComponent style={styles.summaryLabel}>Area (sq. ft.)</TextComponent>
+                            <TextComponent style={styles.summaryValue}>
+                                {displayedSummary.areaSqFt.toFixed(2)}
+                            </TextComponent>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <TextComponent style={styles.summaryLabel}>Price sq. ft.</TextComponent>
+                            <TextComponent style={styles.summaryValue}>
+                                {money(displayedSummary.pricePerSqFt)}
+                            </TextComponent>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <TextComponent style={styles.summaryLabel}>Glass Type</TextComponent>
+                            <TextComponent style={styles.summaryValue}>
+                                {glassColor || 'None'}
+                            </TextComponent>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <TextComponent style={styles.summaryLabel}>Aluminum Profile</TextComponent>
+                            <TextComponent style={styles.summaryValue}>
+                                {aluminumProfile || 'None'}
+                            </TextComponent>
+                        </View>
+                        <TextComponent style={styles.priceHint}>
+                            Calculation: {displayedSummary.areaSqFt.toFixed(2)} sq. ft. × {money(displayedSummary.pricePerSqFt)} × {panelCount} panel(s)
+                        </TextComponent>
+                        <View style={styles.summaryRow}>
+                            <TextComponent style={styles.summaryLabel}>Final Price</TextComponent>
+                            <TextComponent style={styles.totalSummaryLabel}>
+                                {money(displayedSummary.total)}
+                            </TextComponent>
+                        </View>
                         {displayedSummary.lineItems.map((item, idx) => (
                             <View key={`lineitem-${idx}`}>
                                 {renderLineItem(item)}
                             </View>
                         ))}
                     </View>
+                ) : displayedSummary.error ? (
+                    <TextComponent style={styles.inputError}>{displayedSummary.error}</TextComponent>
                 ) : (
                     <TextComponent style={styles.emptyMessage}>
                         Enter specifications, then tap Calculate to see the cost breakdown
                     </TextComponent>
                 )}
-            </View>
-
-            {/* Pricing */}
-            <View style={styles.card}>
-                <TextComponent style={styles.sectionTitle}>💰 Pricing</TextComponent>
-                <TextComponent style={styles.label}>
-                    Price per Square Foot <TextComponent style={styles.required}>*</TextComponent>
-                </TextComponent>
-                <TextInput
-                    value={basePrice}
-                    onChangeText={value => {
-                        setBasePrice(value);
-                        if (Number(value) > 0) setPriceError('');
-                    }}
-                    keyboardType="decimal-pad"
-                    style={styles.input}
-                    placeholder="Enter price"
-                    placeholderTextColor="#94a3b8"
-                />
-                {!!priceError && (
-                    <TextComponent style={styles.inputError}>{priceError}</TextComponent>
-                )}
-                <TextComponent style={styles.priceHint}>
-                    Enter the current price per sq. ft. before tapping Calculate.
-                </TextComponent>
             </View>
 
             {/* Quotations */}

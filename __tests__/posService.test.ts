@@ -1,6 +1,7 @@
 import axiosConfig from '../src/utils/axiosConfig';
 import {
     fetchPosProductCategories,
+    fetchPosQuotationPricing,
     savePosDamageItem,
     updatePosOwnerRequisitionPayment,
 } from '../src/utils/posService';
@@ -43,6 +44,42 @@ describe('POS product category service', () => {
         });
 
         await expect(fetchPosProductCategories()).resolves.toEqual([]);
+    });
+});
+
+describe('POS quotation pricing service', () => {
+    it('fetches and normalizes configurable pricing entries', async () => {
+        (axiosConfig.get as jest.Mock).mockResolvedValueOnce({
+            data: {
+                pricing: [{
+                    width: '48',
+                    height: '48',
+                    unit: 'IN',
+                    glass_color: 'Clear Glass',
+                    thickness: '5',
+                    aluminum_profile: 'Black',
+                    price_per_sq_ft: '281.25',
+                }],
+            },
+        });
+
+        await expect(fetchPosQuotationPricing()).resolves.toEqual([{
+            width: 48,
+            height: 48,
+            unit: 'IN',
+            glass_color: 'Clear Glass',
+            thickness: 5,
+            aluminum_profile: 'Black',
+            price_per_sq_ft: 281.25,
+        }]);
+        expect(axiosConfig.get).toHaveBeenCalledWith(
+            '?action=mobile-pos-quotation-pricing',
+        );
+    });
+
+    it('rejects malformed pricing responses', async () => {
+        (axiosConfig.get as jest.Mock).mockResolvedValueOnce({data: {pricing: {}}});
+        await expect(fetchPosQuotationPricing()).rejects.toThrow('Unable to load quotation pricing.');
     });
 });
 

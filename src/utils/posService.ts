@@ -66,6 +66,32 @@ export const fetchPosProductCategories = async (): Promise<PosProductCategory[]>
     return Array.isArray(res.data) ? res.data : [];
 };
 
+export interface PosQuotationPricingEntry {
+    width: number;
+    height: number;
+    unit: 'MM' | 'CM' | 'IN' | 'Ft' | 'M';
+    glass_color: string;
+    thickness: 5 | 6;
+    aluminum_profile: 'Black' | 'White';
+    price_per_sq_ft: number;
+}
+
+export const fetchPosQuotationPricing = async (): Promise<PosQuotationPricingEntry[]> => {
+    const res = await axiosConfig.get('?action=mobile-pos-quotation-pricing');
+    if (!Array.isArray(res.data?.pricing)) {
+        throw new Error(res.data?.message || 'Unable to load quotation pricing.');
+    }
+    return res.data.pricing.map((item: any) => ({
+        width: Number(item.width),
+        height: Number(item.height),
+        unit: item.unit,
+        glass_color: String(item.glass_color),
+        thickness: Number(item.thickness) as 5 | 6,
+        aluminum_profile: item.aluminum_profile,
+        price_per_sq_ft: Number(item.price_per_sq_ft),
+    }));
+};
+
 export const updatePosProductStock = async (
     branchId: number,
     productId: number,

@@ -315,9 +315,160 @@ export interface QuotationTotals {
     total: number;
 }
 
-export type GlassThickness = 5 | 6 | 8;
-export type GlassColor = 'Clear' | 'Dark Gray' | 'Bronze' | 'Reflective' | 'Mirror' | 'Smoke Glass';
+export type GlassThickness = 5 | 6;
+export type QuotationAluminumProfile = 'Black' | 'White';
+export type GlassColor =
+    | 'Clear Glass'
+    | 'Bronze Glass'
+    | 'Dark Gray Glass'
+    | 'Reflective Blue'
+    | 'Reflective Green'
+    | 'Reflective Bronze'
+    | 'Reflective Dark Gray'
+    | 'Reflective Gold'
+    // Keep legacy values valid for previously saved quotations.
+    | 'Clear'
+    | 'Dark Gray'
+    | 'Bronze'
+    | 'Reflective'
+    | 'Mirror'
+    | 'Smoke Glass';
 export type QuotationServiceMode = 'Supply Only' | 'Delivery & Installation';
+
+export interface QuotationPricingEntry {
+    width: number;
+    height: number;
+    unit: QuotationDimensions['unit'];
+    glassColor: GlassColor;
+    thickness: GlassThickness;
+    aluminumProfile: QuotationAluminumProfile;
+    pricePerSqFt: number;
+}
+
+export interface CombinedQuotationPriceOptions {
+    width: number;
+    height: number;
+    unit: QuotationDimensions['unit'];
+    panelCount: number;
+    glassColor?: GlassColor;
+    thickness: number;
+    aluminumProfile?: string;
+    pricing: QuotationPricingEntry[];
+}
+
+export interface CombinedQuotationPrice {
+    areaSqFt: number;
+    pricePerSqFt: number;
+    materialCost: number;
+    pricingEntry: QuotationPricingEntry;
+}
+
+const normalizeNumber = (value: number): string => Number(value).toFixed(4);
+
+export const createQuotationPricingKey = (
+    width: number,
+    height: number,
+    unit: QuotationDimensions['unit'],
+    glassColor: string | undefined,
+    _thickness: number,
+    aluminumProfile: string | undefined,
+): string => {
+    const dimensions = [Number(width), Number(height)].sort((a, b) => a - b);
+    return [
+        unit,
+        normalizeNumber(dimensions[0]),
+        normalizeNumber(dimensions[1]),
+        glassColor || '',
+        aluminumProfile || '',
+    ].join('|');
+};
+
+export const calculateCombinedQuotationPrice = ({
+    width,
+    height,
+    unit,
+    panelCount,
+    glassColor,
+    thickness,
+    aluminumProfile,
+    pricing,
+}: CombinedQuotationPriceOptions): CombinedQuotationPrice => {
+    if (![5, 6].includes(Number(thickness))) {
+        throw new Error('Only 5mm and 6mm glass are supported.');
+    }
+    if (aluminumProfile && !['Black', 'White'].includes(aluminumProfile)) {
+        throw new Error('Only Black and White aluminum profiles are supported.');
+    }
+
+    const safeWidth = Number(width);
+    const safeHeight = Number(height);
+    const safePanels = Number(panelCount);
+    if (!Number.isFinite(safeWidth) || !Number.isFinite(safeHeight) || safeWidth <= 0 || safeHeight <= 0) {
+        throw new Error('Width and height must be greater than zero.');
+    }
+    if (!Number.isFinite(safePanels) || safePanels <= 0) {
+        throw new Error('Panel count must be greater than zero.');
+    }
+
+    // Thickness remains a separate customer selection, but both 5mm and 6mm
+    // use the same configured rate. Pricing varies only by glass color/profile.
+    const entry = pricing.find(item => createQuotationPricingKey(
+        item.width,
+        item.height,
+        item.unit,
+        item.glassColor,
+        item.thickness,
+        item.aluminumProfile,
+    ) === createQuotationPricingKey(
+        safeWidth,
+        safeHeight,
+        unit,
+        glassColor || '',
+        Number(thickness),
+        aluminumProfile || '',
+    ));
+
+    const baseEntry = !glassColor && !aluminumProfile
+        ? pricing.find(item => createQuotationPricingKey(
+            item.width,
+            item.height,
+            item.unit,
+            '',
+            item.thickness,
+            '',
+        ) === createQuotationPricingKey(
+            safeWidth,
+            safeHeight,
+            unit,
+            '',
+            Number(thickness),
+            '',
+        ))
+        : undefined;
+
+    // Matrix prices are stored using 48x48 as the reference size. If the
+    // selected dimensions do not have an exact row, reuse the matching
+    // reference rate and apply it to the actual calculated area.
+    const referenceEntry = entry || baseEntry || pricing.find(item =>
+        item.unit === unit &&
+        item.glassColor === (glassColor || '') &&
+        item.aluminumProfile === (aluminumProfile || '')
+    );
+
+    const selectedEntry = referenceEntry;
+    if (!selectedEntry || !Number.isFinite(Number(selectedEntry.pricePerSqFt)) || Number(selectedEntry.pricePerSqFt) <= 0) {
+        throw new Error('No configured quotation price is available for this size and selection.');
+    }
+
+    const areaSqFt = convertToSquareFeet(safeWidth, safeHeight, unit);
+    const pricePerSqFt = Number(selectedEntry.pricePerSqFt);
+    return {
+        areaSqFt,
+        pricePerSqFt,
+        materialCost: areaSqFt * pricePerSqFt * safePanels,
+        pricingEntry: selectedEntry,
+    };
+};
 
 export interface QuotationEstimateOptions {
     /** Current configured glass price per square foot. */
@@ -366,32 +517,14 @@ export const calculateQuotationEstimate = ({
     const safePanels = Math.max(1, Number(panelCount) || 1);
     const squareFeet = convertToSquareFeet(width, height, unit);
     const perimeterMeters = calculatePerimeter(width, height, unit);
-    const thicknessMultiplier: Record<GlassThickness, number> = {5: 0.9, 6: 1, 8: 1.25};
-    const colorMultiplier: Record<GlassColor, number> = {
-        Clear: 1,
-        'Dark Gray': 1.15,
-        Bronze: 1.15,
-        Reflective: 1.3,
-        Mirror: 1.4,
-        'Smoke Glass': 1.2,
-    };
-    const designPrices: Record<string, number> = {
-        None: 0,
-        'French Type Design': 1500,
-        'Etched Design': 1800,
-        'Grid Design': 1200,
-    };
-    const addOnPrices: Record<string, number> = {
-        'Mosquito Screen': 650,
-        'Handle & Lock Set': 350,
-        'Rubber Seal Upgrade': 250,
-    };
-
     const safeBasePrice = Math.max(0, Number(basePrice) || 0);
-    const glassCost = safeBasePrice * squareFeet * thicknessMultiplier[thickness] * colorMultiplier[glassColor] * safePanels;
-    const aluminumCost = safeBasePrice * 0.5 * perimeterMeters * safePanels;
-    const designCost = (designPrices[design] || 0) * safePanels;
-    const addOnCost = addOns.reduce((sum, addOn) => sum + (addOnPrices[addOn] || 0) * safePanels, 0);
+    // basePrice is the configured price per square foot for the selected
+    // glass-color/aluminum-color combination. Thickness does not add an
+    // automatic multiplier; clients may configure the same rate for 5mm/6mm.
+    const glassCost = safeBasePrice * squareFeet * safePanels;
+    const aluminumCost = 0;
+    const designCost = 0;
+    const addOnCost = 0;
     const serviceCost = serviceMode === 'Delivery & Installation'
         ? 750 + (500 * safePanels)
         : 0;
@@ -404,7 +537,7 @@ export const calculateQuotationEstimate = ({
         addOnCost,
         serviceCost,
         measurementCost,
-        subtotal: glassCost + aluminumCost + designCost + addOnCost + serviceCost + measurementCost,
+        subtotal: glassCost + serviceCost + measurementCost,
         squareFeet,
         perimeterMeters,
     };
